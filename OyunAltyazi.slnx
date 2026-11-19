@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OyunAltyazi.App/OyunAltyazi.App.csproj" />
+    <Project Path="src/OyunAltyazi.Core/OyunAltyazi.Core.csproj" />
+    <Project Path="src/OyunAltyazi.Translation/OyunAltyazi.Translation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OyunAltyazi.App.Tests/OyunAltyazi.App.Tests.csproj" />
+    <Project Path="tests/OyunAltyazi.Core.Tests/OyunAltyazi.Core.Tests.csproj" />
+    <Project Path="tests/OyunAltyazi.Translation.Tests/OyunAltyazi.Translation.Tests.csproj" />
+  </Folder>
+</Solution>
