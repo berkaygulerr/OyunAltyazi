@@ -2,8 +2,10 @@ namespace OyunAltyazi.Core;
 
 public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, TranslationChain chain, ISubtitleSink sink,
                                      string game, LatencyStats stats, Func<long> clockMs, int maxReadsPerSecond = 10,
-                                     Func<RegionF>? regionProvider = null) : IDisposable
+                                     Func<RegionF>? regionProvider = null, SentenceJoiner? joiner = null) : IDisposable
 {
+    private readonly SentenceJoiner _joiner = joiner ?? new SentenceJoiner();
+    private readonly Dictionary<string, int> _speakerSeen = new(StringComparer.OrdinalIgnoreCase);
     private readonly ChangeGate _gate = new();
     private readonly Stabilizer _stabilizer = new();
     private readonly object _lock = new();
@@ -81,7 +83,8 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                 _lastCapturedMs = frame.TimestampMs;
                 var result = await ocr.ReadAsync(frame, CancellationToken.None).ConfigureAwait(false);
                 _lastOcrDoneMs = clockMs();
-                read = TextCleaner.Clean(result, out var rel, out _lastLines);
+                read = TextCleaner.Clean(result, out var rel, out _lastLines, KnownSpeakers());
+                NoteSpeaker(read);
                 _lastRead = read;
                 _lastBox = rel is null ? null : new RegionF(region.X + rel.X * region.W, region.Y + rel.Y * region.H, rel.W * region.W, rel.H * region.H);
             }
@@ -93,7 +96,7 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
             switch (_stabilizer.Feed(read))
             {
                 case ShowLine show:
-                    StartTranslation(show.Line, _lastBox, _lastLines, _lastCapturedMs, _lastOcrDoneMs, clockMs());
+                    StartTranslation(show.Line, _joiner.Feed(show.Line, clockMs()), _lastBox, _lastLines, _lastCapturedMs, _lastOcrDoneMs, clockMs());
                     break;
                 case ClearLine:
                     CancelTranslation();
@@ -111,7 +114,22 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         }
     }
 
-    private void StartTranslation(SubtitleText line, RegionF? box, int lineCount, long capturedMs, long ocrDoneMs, long stableMs)
+    private IReadOnlyCollection<string> KnownSpeakers()
+    {
+        lock (_lock) return _speakerSeen.Where(kv => kv.Value >= 3).Select(kv => kv.Key).ToArray();
+    }
+
+    private void NoteSpeaker(SubtitleText? read)
+    {
+        if (read?.Speaker is null) return;
+        lock (_lock)
+        {
+            _speakerSeen[read.Speaker] = _speakerSeen.GetValueOrDefault(read.Speaker) + 1;
+            if (_speakerSeen.Count > 40) _speakerSeen.Remove(_speakerSeen.OrderBy(kv => kv.Value).First().Key);
+        }
+    }
+
+    private void StartTranslation(SubtitleText line, JoinResult join, RegionF? box, int lineCount, long capturedMs, long ocrDoneMs, long stableMs)
     {
         CancellationTokenSource cts;
         long mySeq;
@@ -124,18 +142,31 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
             prev = _recent.ToArray();
         }
         var ctx = new TranslationContext(game, prev, line.Speaker);
+        var joined = join.Joined;
         _ = Task.Run(async () =>
         {
             try
             {
+                // 1) the fragment itself, immediately
                 var r = await chain.TranslateAsync(line, ctx, cts.Token).ConfigureAwait(false);
                 lock (_lock)
                 {
                     if (mySeq != _seq || cts.IsCancellationRequested) return;
-                    _recent.Add(line.Text);
-                    while (_recent.Count > 6) _recent.RemoveAt(0);
+                    if (joined is null) { _recent.Add(line.Text); while (_recent.Count > 6) _recent.RemoveAt(0); }
                     sink.Show(line.Speaker, r.Text, r.Source, box, lineCount);
                     stats.Add(new LineTiming(capturedMs, ocrDoneMs, stableMs, clockMs(), r.Source));
+                }
+                if (joined is null) return;
+                // 2) the whole sentence replaces it
+                var jr = await chain.TranslateAsync(joined, new TranslationContext(game, prev, joined.Speaker), cts.Token).ConfigureAwait(false);
+                lock (_lock)
+                {
+                    if (mySeq != _seq || cts.IsCancellationRequested) return;
+                    if (jr.Source == TranslationSource.Fallback) return; // keep the fragment's good translation
+                    if (_recent.Count > 0) _recent.RemoveAt(_recent.Count - 1); // earlier open fragment(s) are superseded
+                    _recent.Add(joined.Text);
+                    while (_recent.Count > 6) _recent.RemoveAt(0);
+                    sink.Show(joined.Speaker, jr.Text, jr.Source, box, lineCount);
                 }
             }
             catch (OperationCanceledException) { }

@@ -52,7 +52,7 @@ public class SubtitlePipelineTests
         }
     }
 
-    private const string A = "Hold the line", B = "Get to the chopper";
+    private const string A = "Hold the line.", B = "Get to the chopper.";
     private static Frame F(byte v, long t) => new(64, 16, 256, Enumerable.Repeat(v, 256 * 16).ToArray(), t);
 
     private sealed class Rig
@@ -130,5 +130,38 @@ public class SubtitlePipelineTests
         var r = new Rig();
         r.Src.Close();
         Assert.Equal(1, r.Sink.Clears);
+    }
+
+    [Fact] public async Task Open_fragment_shows_alone_then_joined_translation_replaces_it()
+    {
+        var r = new Rig();
+        r.Ocr.Texts[50] = "We have to get to the extraction point";
+        r.Ocr.Texts[120] = "before the enemy arrives.";
+        r.Send(50); r.Send(50);
+        await WaitFor(() => r.Sink.Snapshot().Length == 1);
+        r.Send(120); r.Send(120);
+        await WaitFor(() => r.Sink.Snapshot().Length == 3);
+        var shown = r.Sink.Snapshot();
+        Assert.Equal("TR:before the enemy arrives.", shown[1]);
+        Assert.Equal("TR:We have to get to the extraction point before the enemy arrives.", shown[2]);
+    }
+
+    [Fact] public async Task Stale_joined_translation_is_discarded()
+    {
+        var r = new Rig();
+        r.Ocr.Texts[50] = "We have to get to the extraction point";
+        r.Ocr.Texts[120] = "before the enemy arrives.";
+        r.Ocr.Texts[200] = "Something else entirely.";
+        var gate = new TaskCompletionSource<bool>();
+        r.Tr.Gates["We have to get to the extraction point before the enemy arrives."] = gate;
+        r.Send(50); r.Send(50);
+        await WaitFor(() => r.Sink.Snapshot().Length == 1);
+        r.Send(120); r.Send(120);
+        await WaitFor(() => r.Sink.Snapshot().Length == 2);
+        r.Send(200); r.Send(200);
+        await WaitFor(() => r.Sink.Snapshot().Length == 3);
+        gate.SetResult(true);
+        await Task.Delay(300);
+        Assert.DoesNotContain(r.Sink.Snapshot(), x => x.Contains("extraction point before"));
     }
 }
