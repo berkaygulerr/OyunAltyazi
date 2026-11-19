@@ -9,7 +9,7 @@ using OyunAltyazi.Core;
 
 namespace OyunAltyazi.App;
 
-public partial class MainWindow : Window
+public sealed partial class MainWindow : Window
 {
     private sealed record Item(WindowInfo Info)
     {
@@ -32,25 +32,7 @@ public partial class MainWindow : Window
     private IFrameSource? _source;
     private SubtitlePipeline? _pipeline;
     private bool _suppressSelection;
-
-    private void UpdateTranslatorWarning()
-    {
-        if (TranslatorCombo.SelectedIndex == 0 && !_app.LocalInstalled)
-        {
-            WarningText.Text = "Yerel model kurulu değil: tools\\ct2server\\setup.ps1 çalıştırın (şimdilik Google kullanılıyor).";
-            WarningText.Visibility = Visibility.Visible;
-        }
-        else if (_app.Ocr is not null && WgcFrameSource.IsSupported) WarningText.Visibility = Visibility.Collapsed;
-    }
-
-    private void TranslatorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!IsLoaded || Running) { if (Running) TranslatorCombo.SelectedIndex = _app.TranslatorName == "Google" ? 1 : 0; return; }
-        var choice = (string)((ComboBoxItem)TranslatorCombo.SelectedItem).Tag;
-        _app.SetTranslator(choice);
-        _app.Settings.Save(_app.Settings.Load() with { Translator = choice });
-        UpdateTranslatorWarning();
-    }
+    private bool _ready;
 
     private DiagnosticLog? _diagLog;
     private bool Running => _pipeline is not null;
@@ -58,8 +40,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        TranslatorCombo.SelectedIndex = _app.Settings.Load().Translator == "google_only" ? 1 : 0;
-        UpdateTranslatorWarning();
+        DarkTitleBar.Apply(this);
+        var settings = _app.Settings.Load();
+        (settings.Translator == "google_only" ? TrGoogle : TrLocal).IsChecked = true;
+        InitTranslatorCard();
         var showShots = _app.Settings.Load().ShowInScreenshots;
         ScreenshotCheck.IsChecked = showShots;
         DiagCheck.IsChecked = _app.Settings.Load().DiagnosticLog;
@@ -76,6 +60,12 @@ public partial class MainWindow : Window
         }
         RefreshList(selectLast: true);
         UpdateButtons();
+        _ready = true;
+        // Ekran görüntüsü doğrulaması için: OYUNALTYAZI_TAB=0..3 başlangıç sekmesini, OYUNALTYAZI_COMBO=1 açılır listeyi açar.
+        if (int.TryParse(Environment.GetEnvironmentVariable("OYUNALTYAZI_TAB"), out var tab) && tab is >= 0 and < 4) Tabs.SelectedIndex = tab;
+        if (Environment.GetEnvironmentVariable("OYUNALTYAZI_COMBO") == "1") Loaded += (_, _) => WindowCombo.IsDropDownOpen = true;
+        RefreshPreview();
+        UpdateSubtitlePreview();
         _diag.Tick += (_, _) => UpdateDiagnostics();
         _diag.Start();
         SourceInitialized += (_, _) =>
@@ -85,7 +75,7 @@ public partial class MainWindow : Window
             if (!_hotkeys.Register(1, 'T', ToggleRun)) failed.Add("Ctrl+Shift+T");
             if (!_hotkeys.Register(2, 'H', () => _overlay.UserHidden = !_overlay.UserHidden)) failed.Add("Ctrl+Shift+H");
             if (!_hotkeys.Register(3, 'R', SelectRegion)) failed.Add("Ctrl+Shift+R");
-            if (failed.Count > 0) StatusText.Text = "Kısayol başka bir uygulamada kullanılıyor: " + string.Join(", ", failed);
+            if (failed.Count > 0) SetStatus("Kısayol başka bir uygulamada kullanılıyor: " + string.Join(", ", failed));
         };
         Closed += (_, _) =>
         {
@@ -119,20 +109,23 @@ public partial class MainWindow : Window
             var s = _app.Settings.Load();
             if (s.LastExe != info.ExeName) _app.Settings.Save(s with { LastExe = info.ExeName });
         }
-        CoverCheck.IsChecked = _profile?.Overlay.CoverOriginal ?? true;
-        _loadingFont = true;
-        FontSlider.Value = _profile?.Overlay.FontSize ?? CoverLayout.DefaultFont;
-        FontValue.Text = ((int)FontSlider.Value).ToString();
-        _loadingFont = false;
+        LoadProfileControls();
         UpdateButtons();
+        if (_ready) RefreshPreview();
     }
 
     private void UpdateButtons()
     {
         StartBtn.IsEnabled = _app.Ocr is not null && (Running || _selected is not null);
-        StartBtn.Content = Running ? "■ Durdur" : "▶ Başlat";
+        StartBtn.Content = Running ? "■  Durdur" : "▶  Çeviriyi Başlat";
+        StartBtn.Style = (Style)FindResource(Running ? "DangerButton" : "SuccessButton");
         SelectRegionBtn.IsEnabled = _selected is not null;
+        PreviewRefreshBtn.IsEnabled = _selected is not null;
         WindowCombo.IsEnabled = !Running;
+        RefreshBtn.IsEnabled = !Running;
+        TrLocal.IsEnabled = TrGoogle.IsEnabled = !Running;
+        TrLockedNote.Visibility = Running ? Visibility.Visible : Visibility.Collapsed;
+        UpdateStatusDots();
     }
 
     private void WindowCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -142,69 +135,12 @@ public partial class MainWindow : Window
         ApplySelection((WindowCombo.SelectedItem as Item)?.Info);
     }
 
-    private bool _loadingFont;
-
-    private void FontSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (FontValue is null) return;
-        FontValue.Text = ((int)e.NewValue).ToString();
-        if (_loadingFont || _profile is null) return;
-        _profile = _profile with { Overlay = _profile.Overlay with { FontSize = e.NewValue } };
-        var s = _app.Settings.Load();
-        var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase) { [_profile.ExeName] = _profile };
-        _app.Settings.Save(s with { Profiles = profiles });
-        _overlay.SetStyle(_profile.Overlay);
-    }
-
-    private void CoverCheck_Click(object sender, RoutedEventArgs e)
-    {
-        if (_profile is null) return;
-        _profile = _profile with { Overlay = _profile.Overlay with { CoverOriginal = CoverCheck.IsChecked == true } };
-        if (_app.Settings.HasProfile(_profile.ExeName))
-        {
-            var s = _app.Settings.Load();
-            var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase) { [_profile.ExeName] = _profile };
-            _app.Settings.Save(s with { Profiles = profiles });
-        }
-        _overlay.SetStyle(_profile.Overlay);
-    }
-
-    private void ScreenshotCheck_Click(object sender, RoutedEventArgs e)
-    {
-        bool on = ScreenshotCheck.IsChecked == true;
-        _overlay.ExcludeFromCapture = !on;
-        _app.Settings.Save(_app.Settings.Load() with { ShowInScreenshots = on });
-    }
-
-    private void DiagCheck_Click(object sender, RoutedEventArgs e) =>
-        _app.Settings.Save(_app.Settings.Load() with { DiagnosticLog = DiagCheck.IsChecked == true });
-
-    private static string LogDirectory => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OyunAltyazi", "logs");
-
     private void Refresh_Click(object sender, RoutedEventArgs e) { if (!Running) RefreshList(); }
-    private void SelectRegion_Click(object sender, RoutedEventArgs e) => SelectRegion();
     private void Start_Click(object sender, RoutedEventArgs e) => ToggleRun();
-
-    private void SelectRegion()
-    {
-        if (_selected is null || _profile is null) return;
-        var snap = WgcFrameSource.Snapshot(_selected.Hwnd);
-        if (snap is null) { StatusText.Text = "Pencere görüntüsü alınamadı (küçültülmüş ya da kapanmış olabilir)."; return; }
-        var dlg = new RegionSelector(snap, _profile.Region) { Owner = this };
-        if (dlg.ShowDialog() != true) return;
-        _profile = _profile with { Region = dlg.Result, AutoDetected = false };
-        var s = _app.Settings.Load();
-        var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase)
-        {
-            [_profile.ExeName] = _profile
-        };
-        _app.Settings.Save(s with { Profiles = profiles, LastExe = _profile.ExeName });
-        StatusText.Text = "Bölge kaydedildi.";
-    }
 
     private void ToggleRun()
     {
-        if (Running) { StopRun(); StatusText.Text = "Durduruldu."; return; }
+        if (Running) { StopRun(); SetStatus("Durduruldu."); return; }
         if (_app.Ocr is null || _selected is null || _profile is null) return;
         var profile = _profile;
         _overlay.Attach(_selected.Hwnd, profile.Overlay);
@@ -221,7 +157,7 @@ public partial class MainWindow : Window
             catch (Exception) { _diagLog = null; }
         }
         _pipeline.Start();
-        StatusText.Text = "Çalışıyor…";
+        SetStatus("Çalışıyor…");
         UpdateButtons();
     }
 
@@ -240,26 +176,74 @@ public partial class MainWindow : Window
     private void OnSourceStopped(string reason) => Dispatcher.InvokeAsync(() =>
     {
         StopRun();
-        StatusText.Text = reason + " — durduruldu.";
+        SetStatus(reason + " — durduruldu.");
     });
+
+    private string _lastText = "";
 
     private void ShowLast(string? speaker, string text, TranslationSource source) => Dispatcher.InvokeAsync(() =>
     {
         var label = source switch
         {
-            TranslationSource.Cache => "önbellek",
-            TranslationSource.Translator => "çevrimiçi",
+            TranslationSource.Cache => "kaynak: önbellek",
+            TranslationSource.Translator => $"kaynak: {(_app.TranslatorName == "Google" ? "Google (çevrimiçi)" : "yerel model")}",
             _ => "yedek: çeviri başarısız, İngilizce gösteriliyor",
         };
-        LastLineText.Text = $"Son satır:  {(speaker is null ? "" : speaker + ": ")}{text}   (kaynak: {label})";
+        _lastText = text;
+        LastSpeakerText.Text = speaker ?? "";
+        LastSpeakerText.Visibility = string.IsNullOrEmpty(speaker) ? Visibility.Collapsed : Visibility.Visible;
+        LastLineText.Text = text;
+        LastSourceText.Text = label;
+        CopyBtn.IsEnabled = true;
     });
+
+    private void Copy_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastText.Length == 0) return;
+        try { Clipboard.SetText(_lastText); } catch (System.Runtime.InteropServices.COMException) { }
+    }
+
+    private void SetStatus(string text)
+    {
+        StatusText.Text = text;
+        StatusText.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
 
     private void UpdateDiagnostics()
     {
         var a = _app.Stats.StableToShown();
         var b = _app.Stats.CaptureToShown();
-        LatencyText.Text = a.Count == 0
-            ? "Gecikme (son 50): henüz veri yok"
-            : $"Gecikme (son {a.Count}): sabit→ekran ort {a.AvgMs:0} ms / p95 {a.P95Ms:0} ms · yakalama→ekran ort {b.AvgMs:0} ms / p95 {b.P95Ms:0} ms";
+        if (a.Count == 0)
+        {
+            LatAvg.Text = LatP95.Text = "—";
+            LatencyText.Text = "Henüz veri yok";
+        }
+        else
+        {
+            LatAvg.Text = $"{a.AvgMs:0} ms";
+            LatP95.Text = $"{a.P95Ms:0} ms";
+            LatencyText.Text = $"Son {a.Count} satır · yakalama→ekran ort {b.AvgMs:0} ms / p95 {b.P95Ms:0} ms";
+        }
+        if (Tabs.SelectedIndex == 2) UpdateCacheCount();
+    }
+
+    private void UpdateStatusDots()
+    {
+        static void Set(System.Windows.Shapes.Ellipse dot, TextBlock label, string key, string text)
+        {
+            dot.Fill = (System.Windows.Media.Brush)Application.Current.FindResource(key);
+            label.Text = text;
+        }
+        if (!WgcFrameSource.IsSupported) Set(DotCapture, CaptureStatus, "ErrorBrush", "Desteklenmiyor");
+        else if (Running) Set(DotCapture, CaptureStatus, "SuccessBrush", "Yakalanıyor");
+        else if (_selected is not null) Set(DotCapture, CaptureStatus, "AccentBrush", "Hazır (beklemede)");
+        else Set(DotCapture, CaptureStatus, "MutedBrush", "Oyun seçilmedi");
+
+        if (_app.Ocr is not null) Set(DotOcr, OcrStatus, "SuccessBrush", "Windows OCR hazır");
+        else Set(DotOcr, OcrStatus, "ErrorBrush", "İngilizce OCR yok");
+
+        if (TrGoogle.IsChecked == true) Set(DotTr, TrStatus, "SuccessBrush", "Google (çevrimiçi)");
+        else if (_app.LocalInstalled) Set(DotTr, TrStatus, "SuccessBrush", "Yerel model hazır (GPU)");
+        else Set(DotTr, TrStatus, "WarnBrush", "Model yok → Google");
     }
 }

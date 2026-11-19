@@ -19,6 +19,14 @@ public class SqliteTranslationCacheTests : IDisposable
         c.Put("mw", "Frag out!", "Bomba!", "google");
         Assert.True(c.TryGet("mw", "FRAG OUT", out _));
     }
+    [Fact] public void Count_and_clear()
+    {
+        using var c = new SqliteTranslationCache(Db);
+        c.Put("mw", "Frag out!", "Bomba!", "google"); c.Put("mw", "Go go go", "Gidin!", "google");
+        Assert.Equal(2, c.Count());
+        c.Clear();
+        Assert.Equal(0, c.Count());
+    }
     [Fact] public void Other_game_misses()
     {
         using var c = new SqliteTranslationCache(Db);

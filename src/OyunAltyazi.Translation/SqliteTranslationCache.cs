@@ -55,5 +55,17 @@ public sealed class SqliteTranslationCache : ITranslationCache, IDisposable
         }
     }
 
+    public long Count()
+    {
+        lock (_lock)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM translations";
+            return Convert.ToInt64(cmd.ExecuteScalar());
+        }
+    }
+
+    public void Clear() { lock (_lock) Exec("DELETE FROM translations;"); }
+
     public void Dispose() => _conn.Dispose();
 }

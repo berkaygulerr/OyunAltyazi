@@ -17,6 +17,7 @@ public sealed partial class RegionSelector : Window
     public RegionSelector(Core.Frame snapshot, RegionF current)
     {
         InitializeComponent();
+        DarkTitleBar.Apply(this);
         double scale = Math.Min(1.0, 1000.0 / snapshot.Width);
         Surface.Width = snapshot.Width * scale;
         Surface.Height = snapshot.Height * scale;
