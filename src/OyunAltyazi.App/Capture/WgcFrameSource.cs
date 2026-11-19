@@ -40,6 +40,9 @@ public sealed unsafe class WgcFrameSource : IFrameSource
     private long _lastMs;
     private bool _running;
     private Timer? _watch;
+    private Frame? _lastFrame;
+    private RegionF? _lastRegion;
+    private long _lastEmitMs;
 
     public event Action<Frame>? FrameArrived;
     public event Action<string>? Stopped;
@@ -79,7 +82,7 @@ public sealed unsafe class WgcFrameSource : IFrameSource
                     try { _session.IsBorderRequired = false; } catch { }
                     _session.StartCapture();
                     _running = true;
-                    _watch = new Timer(_ => { if (!IsWindow(_hwnd)) OnClosed(null!, null!); }, null, 250, 250);
+                    _watch = new Timer(_ => Tick(), null, 100, 100);
                 }
                 catch (Exception e)
                 {
@@ -109,9 +112,28 @@ public sealed unsafe class WgcFrameSource : IFrameSource
         if (was) Stopped?.Invoke("Pencere kapandı");
     }
 
+    // WGC only delivers frames when the window content changes. A static subtitle would never be
+    // confirmed by the stabilizer, so a quiet source repeats its last frame (same region only).
+    private void Tick()
+    {
+        if (!IsWindow(_hwnd)) { OnClosed(null!, null!); return; }
+        Frame? again = null;
+        lock (_lock)
+        {
+            long now = Environment.TickCount64;
+            if (_running && _lastFrame is not null && _lastRegion == _region() && now - _lastEmitMs >= 100)
+            {
+                _lastEmitMs = now;
+                again = _lastFrame with { TimestampMs = now };
+            }
+        }
+        if (again is not null) FrameArrived?.Invoke(again);
+    }
+
     private void Cleanup()
     {
         _watch?.Dispose(); _watch = null;
+        _lastFrame = null; _lastRegion = null;
         try { if (_pool is not null) _pool.FrameArrived -= OnPoolFrame; } catch { }
         try { if (_item is not null) _item.Closed -= OnClosed; } catch { }
         try { _session?.Dispose(); } catch { }
@@ -145,7 +167,9 @@ public sealed unsafe class WgcFrameSource : IFrameSource
                 long now = Environment.TickCount64;
                 if (now - _lastMs < _minIntervalMs) return;
                 _lastMs = now;
-                output = CopyRegion(f, now, _region());
+                var region = _region();
+                output = CopyRegion(f, now, region);
+                _lastFrame = output; _lastRegion = region; _lastEmitMs = now;
             }
             catch (Exception) { /* a dropped frame is fine; the next one retries */ }
         }
