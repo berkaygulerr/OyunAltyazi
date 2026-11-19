@@ -34,9 +34,14 @@ public interface IOcrEngine
     Task<OcrResult> ReadAsync(Frame frame, CancellationToken ct);
 }
 
+/// <summary>One translated utterance of the on-screen subtitle (a speaker line or an unlabelled one).</summary>
+public sealed record ShownUtterance(string? Speaker, string Text, TranslationSource Source);
+
 public interface ISubtitleSink
 {
-    /// <param name="box">Window-relative (0..1) bounding box of the original English subtitle, when known.</param>
-    void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1);
+    /// <summary>The whole current subtitle as stacked utterances in on-screen order (replaces what was shown before).</summary>
+    /// <param name="box">Stabilised cover box (frame fractions) covering the whole English block, when known.</param>
+    /// <param name="anchorTop">The bubble is pinned by its top edge (the game subtitle grows downward) instead of its bottom edge.</param>
+    void Show(IReadOnlyList<ShownUtterance> utterances, RegionF? box = null, int lineCount = 1, bool anchorTop = false);
     void Clear();
 }

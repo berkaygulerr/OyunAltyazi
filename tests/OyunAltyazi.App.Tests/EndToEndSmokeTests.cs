@@ -23,7 +23,7 @@ public class EndToEndSmokeTests
     {
         public readonly List<(string? Speaker, string Text, TranslationSource Source)> Shown = new();
         public int Cleared;
-        public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1) { lock (Shown) Shown.Add((speaker, text, source)); }
+        public void Show(IReadOnlyList<ShownUtterance> u, RegionF? box = null, int lineCount = 1, bool anchorTop = false) { lock (Shown) foreach (var x in u) Shown.Add((x.Speaker, x.Text, x.Source)); }
         public void Clear() => Interlocked.Increment(ref Cleared);
     }
 

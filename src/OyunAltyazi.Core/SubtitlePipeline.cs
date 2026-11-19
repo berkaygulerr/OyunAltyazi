@@ -6,10 +6,14 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                                      string game, LatencyStats stats, Func<long> clockMs, int maxReadsPerSecond = 10,
                                      Func<RegionF>? regionProvider = null, SentenceJoiner? joiner = null) : IDisposable
 {
-    private readonly SentenceJoiner _joiner = joiner ?? new SentenceJoiner();
+    private readonly Func<SentenceJoiner> _joinerFactory = joiner is null ? () => new SentenceJoiner() : () => joiner;
+    private readonly Dictionary<string, Slot> _slots = new(StringComparer.OrdinalIgnoreCase);
+    private List<string> _order = new();
+    private readonly CoverAnchor _anchor = new();
+    private RegionF? _coverBox;
+    private bool _anchorTop;
     private readonly Dictionary<string, int> _speakerSeen = new(StringComparer.OrdinalIgnoreCase);
     private readonly ChangeGate _gate = new();
-    private readonly Stabilizer _stabilizer = new();
     private readonly object _lock = new();
     private readonly List<string> _recent = new();
     private readonly int _minIntervalMs = 1000 / Math.Max(1, maxReadsPerSecond);
@@ -17,10 +21,8 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
     public Action<ReadLogEntry>? Log { get; set; }
     public bool IsBusy => Volatile.Read(ref _busy) != 0;
     private long _lastReadMs = long.MinValue;
-    private SubtitleText? _lastRead;
     private long _lastCapturedMs, _lastOcrDoneMs;
-    private CancellationTokenSource? _translateCts;
-    private long _seq;
+    private IReadOnlyList<SubtitleText> _lastScene = [];
     private bool _running;
     private RegionF? _lastBox;
     private int _lastLines = 1;
@@ -52,13 +54,23 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         sink.Clear();
     }
 
+    /// <summary>One on-screen speaker line: its own stabilizer, sentence joiner and translation.</summary>
+    private sealed class Slot(Stabilizer stabilizer, SentenceJoiner joiner)
+    {
+        public readonly Stabilizer Stab = stabilizer;
+        public readonly SentenceJoiner Joiner = joiner;
+        public CancellationTokenSource? Cts;
+        public long Seq;
+        public ShownUtterance? Shown;
+    }
+
     private void CancelTranslation()
     {
         lock (_lock)
         {
-            _seq++;
-            _translateCts?.Cancel();
-            _translateCts = null;
+            foreach (var slot in _slots.Values) { slot.Seq++; slot.Cts?.Cancel(); slot.Cts = null; }
+            _slots.Clear();
+            _order = new();
         }
     }
 
@@ -76,11 +88,14 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         _ = ProcessAsync(frame);
     }
 
+    // A slot is one speaker's line; unlabelled lines are keyed by their position.
+    private static string SlotKey(SubtitleText u, int index) => u.Speaker is null ? "#" + index : u.Speaker;
+
     private async Task ProcessAsync(Frame frame)
     {
         try
         {
-            SubtitleText? read;
+            IReadOnlyList<SubtitleText> scene;
             string raw = "";
             bool changed = _gate.HasChanged(frame);
             if (changed)
@@ -90,29 +105,65 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                 var result = await ocr.ReadAsync(frame, CancellationToken.None).ConfigureAwait(false);
                 _lastOcrDoneMs = clockMs();
                 raw = string.Join(" | ", result.Lines.Select(l => l.Text));
-                read = TextCleaner.Clean(result, out var rel, out _lastLines, KnownSpeakers());
-                NoteSpeaker(read);
-                _lastRead = read;
+                scene = TextCleaner.CleanScene(result, out var rel, out _lastLines, KnownSpeakers());
+                foreach (var u in scene) NoteSpeaker(u);
+                _lastScene = scene;
+                _lastRegion = region;
                 _lastBox = rel is null ? null : new RegionF(region.X + rel.X * region.W, region.Y + rel.Y * region.H, rel.W * region.W, rel.H * region.H);
             }
-            else
-            {
-                read = _lastRead;
-            }
+            else scene = _lastScene;
 
-            var ev = _stabilizer.Feed(read);
-            Log?.Invoke(new ReadLogEntry(frame.TimestampMs, changed, raw, read is null ? "" : (read.Speaker is null ? "" : read.Speaker + ": ") + read.Text,
-                ev switch { ShowLine => "SHOW", ClearLine => "CLEAR", _ => "" }));
-            switch (ev)
+            var events = new List<(string Key, StabilizerEvent Ev)>();
+            var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var order = new List<string>();
+            for (int i = 0; i < scene.Count; i++)
             {
-                case ShowLine show:
-                    StartTranslation(show.Line, _joiner.Feed(show.Line, clockMs()), _lastBox, _lastLines, _lastCapturedMs, _lastOcrDoneMs, clockMs());
-                    break;
-                case ClearLine:
-                    CancelTranslation();
-                    sink.Clear();
-                    break;
+                var key = SlotKey(scene[i], i);
+                // Slot identity follows the LINE, not its (often mis-read) speaker label: a read that matches what a slot shows or is
+                // about to show belongs to that slot; a lone utterance with a lone slot is that slot's line.
+                lock (_lock)
+                {
+                    if (!_slots.ContainsKey(key))
+                    {
+                        var match = _slots.FirstOrDefault(kv => !present.Contains(kv.Key) && kv.Value.Stab.Matches(scene[i].Text));
+                        if (match.Key is not null) key = match.Key;
+                        else if (scene.Count == 1 && _slots.Count == 1) key = _slots.Keys.First();
+                    }
+                }
+                if (!present.Add(key)) continue;
+                order.Add(key);
+                Slot slot;
+                lock (_lock) { if (!_slots.TryGetValue(key, out slot!)) _slots[key] = slot = new Slot(new Stabilizer(), _joinerFactory()); }
+                if (slot.Stab.Feed(scene[i]) is { } ev) events.Add((key, ev));
             }
+            Slot[] absent; string[] absentKeys;
+            lock (_lock) { absentKeys = _slots.Keys.Where(k => !present.Contains(k)).ToArray(); absent = absentKeys.Select(k => _slots[k]).ToArray(); }
+            for (int i = 0; i < absent.Length; i++)
+                if (absent[i].Stab.Feed(null) is { } ev) events.Add((absentKeys[i], ev));
+            if (order.Count > 0) lock (_lock) _order = order;
+
+            Log?.Invoke(new ReadLogEntry(frame.TimestampMs, changed, raw, string.Join(" ¶ ", scene.Select(u => (u.Speaker is null ? "" : u.Speaker + ": ") + u.Text)),
+                events.Any(e => e.Ev is ShowLine) ? "SHOW" : events.Any(e => e.Ev is ClearLine) ? "CLEAR" : ""));
+
+            bool anyShow = events.Any(e => e.Ev is ShowLine);
+            if (anyShow && _lastBox is { } eb) { _coverBox = _anchor.Stabilize(eb, _lastRegion ?? new RegionF(0, 0, 1, 1)); _anchorTop = _anchor.AnchorTop; }
+            foreach (var (key, ev) in events)
+            {
+                switch (ev)
+                {
+                    case ShowLine show:
+                        Slot? slot; lock (_lock) _slots.TryGetValue(key, out slot);
+                        if (slot is not null) StartTranslation(slot, show.Line, slot.Joiner.Feed(show.Line, clockMs()), _lastCapturedMs, _lastOcrDoneMs, clockMs());
+                        break;
+                    case ClearLine:
+                        lock (_lock)
+                        {
+                            if (_slots.Remove(key, out var gone)) { gone.Seq++; gone.Cts?.Cancel(); gone.Cts = null; }
+                        }
+                        break;
+                }
+            }
+            if (events.Any(e => e.Ev is ClearLine)) Publish();
         }
         catch (Exception)
         {
@@ -122,6 +173,21 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         {
             Volatile.Write(ref _busy, 0);
         }
+    }
+
+    private RegionF? _lastRegion;
+
+    /// <summary>Hands the sink the current stacked utterances in on-screen order; clears it when none is left. Caller must hold no lock.</summary>
+    private void Publish()
+    {
+        lock (_lock) PublishLocked();
+    }
+
+    private void PublishLocked()
+    {
+        var list = _order.Where(k => _slots.TryGetValue(k, out var s) && s.Shown is not null).Select(k => _slots[k].Shown!).ToList();
+        if (list.Count == 0) { if (_slots.Count == 0) sink.Clear(); return; }
+        sink.Show(list, _coverBox, _lastLines, _anchorTop);
     }
 
     private IReadOnlyCollection<string> KnownSpeakers()
@@ -139,16 +205,16 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         }
     }
 
-    private void StartTranslation(SubtitleText line, JoinResult join, RegionF? box, int lineCount, long capturedMs, long ocrDoneMs, long stableMs)
+    private void StartTranslation(Slot slot, SubtitleText line, JoinResult join, long capturedMs, long ocrDoneMs, long stableMs)
     {
         CancellationTokenSource cts;
         long mySeq;
         string[] prev;
         lock (_lock)
         {
-            _translateCts?.Cancel();
-            cts = _translateCts = new CancellationTokenSource();
-            mySeq = ++_seq;
+            slot.Cts?.Cancel();
+            cts = slot.Cts = new CancellationTokenSource();
+            mySeq = ++slot.Seq;
             prev = _recent.ToArray();
         }
         var ctx = new TranslationContext(game, prev, line.Speaker);
@@ -161,9 +227,10 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                 var r = await chain.TranslateAsync(line, ctx, cts.Token).ConfigureAwait(false);
                 lock (_lock)
                 {
-                    if (mySeq != _seq || cts.IsCancellationRequested) return;
+                    if (mySeq != slot.Seq || cts.IsCancellationRequested) return;
                     if (joined is null) { _recent.Add(line.Text); while (_recent.Count > 6) _recent.RemoveAt(0); }
-                    sink.Show(line.Speaker, r.Text, r.Source, box, lineCount);
+                    slot.Shown = new ShownUtterance(line.Speaker, r.Text, r.Source);
+                    PublishLocked();
                     stats.Add(new LineTiming(capturedMs, ocrDoneMs, stableMs, clockMs(), r.Source));
                 }
                 if (joined is null) return;
@@ -171,12 +238,13 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                 var jr = await chain.TranslateAsync(joined, new TranslationContext(game, prev, joined.Speaker), cts.Token).ConfigureAwait(false);
                 lock (_lock)
                 {
-                    if (mySeq != _seq || cts.IsCancellationRequested) return;
+                    if (mySeq != slot.Seq || cts.IsCancellationRequested) return;
                     if (jr.Source == TranslationSource.Fallback) return; // keep the fragment's good translation
                     if (_recent.Count > 0) _recent.RemoveAt(_recent.Count - 1); // earlier open fragment(s) are superseded
                     _recent.Add(joined.Text);
                     while (_recent.Count > 6) _recent.RemoveAt(0);
-                    sink.Show(joined.Speaker, jr.Text, jr.Source, box, lineCount);
+                    slot.Shown = new ShownUtterance(joined.Speaker, jr.Text, jr.Source);
+                    PublishLocked();
                 }
             }
             catch (OperationCanceledException) { }

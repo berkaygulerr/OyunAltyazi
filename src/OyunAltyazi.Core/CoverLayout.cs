@@ -16,10 +16,11 @@ public static class CoverLayout
     /// Position only: element centred horizontally on the English box, bottom at English bottom + Pad (grows upward),
     /// clamped so it stays fully inside the overlay (when it fits).
     /// </summary>
-    public static (double X, double Y) Place(double width, double height, DipRect english, double overlayW, double overlayH)
+    public static (double X, double Y) Place(double width, double height, DipRect english, double overlayW, double overlayH, bool anchorTop = false)
     {
         double x = english.CenterX - width / 2;
-        double y = english.Bottom + Pad - height;
+        // Bottom-anchored games grow upward (bubble bottom pinned); top-anchored ones grow downward (bubble top pinned).
+        double y = anchorTop ? english.Y - Pad : english.Bottom + Pad - height;
         x = Math.Max(0, Math.Min(x, overlayW - width));
         y = Math.Max(0, Math.Min(y, overlayH - height));
         return (x, y);

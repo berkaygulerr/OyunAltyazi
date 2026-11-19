@@ -15,3 +15,5 @@
 Kurulu değilse uygulama Google çevirisine döner.
 
 Parts adapted from GameTranslator (sefflex) / CouchSubs (Sinan Yorulmaz), AGPL-3.0
+
+- **english-words.txt.gz** (src/OyunAltyazi.Core/Resources) — SCOWL/ESDB size-60 English word list taken from GameTranslator (sefflex), AGPL-3.0; SCOWL license: http://wordlist.aspell.net/scowl-readme/

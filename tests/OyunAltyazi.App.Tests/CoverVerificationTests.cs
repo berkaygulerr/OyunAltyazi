@@ -68,7 +68,7 @@ $s.AutoSize=$false; $s.TextAlign='MiddleCenter'; $s.Left=0; $s.Width=1600; $s.He
     private sealed class Sink(OverlayWindow o) : ISubtitleSink
     {
         public volatile bool Shown; public volatile RegionF? Box; public volatile int Lines;
-        public void Show(string? s, string t, TranslationSource src, RegionF? box = null, int lineCount = 1) { Box = box; Lines = lineCount; o.Show(s, t, src, box, lineCount); Shown = true; }
+        public void Show(IReadOnlyList<ShownUtterance> u, RegionF? box = null, int lineCount = 1, bool anchorTop = false) { Box = box; Lines = lineCount; o.Show(u, box, lineCount, anchorTop); Shown = true; }
         public void Clear() => o.Clear();
     }
 

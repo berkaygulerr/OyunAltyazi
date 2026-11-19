@@ -63,10 +63,10 @@ public class StabilizerTests
     [Fact] public void Garbled_read_needs_more_agreement()
     {
         var s = new Stabilizer();
-        Assert.Null(s.Feed(T("Commånder was shøoting")));
-        Assert.Null(s.Feed(T("Commånder was shøoting")));
-        Assert.Null(s.Feed(T("Commånder was shøoting")));
-        Assert.NotNull(s.Feed(T("Commånder was shøoting")));
+        Assert.Null(s.Feed(T("Commander was shooting at the tAnk")));
+        Assert.Null(s.Feed(T("Commander was shooting at the tAnk")));
+        Assert.Null(s.Feed(T("Commander was shooting at the tAnk")));
+        Assert.NotNull(s.Feed(T("Commander was shooting at the tAnk")));
     }
 
     [Fact] public void Clean_reread_upgrades_garbled_line()
@@ -95,6 +95,6 @@ public class StabilizerTests
     {
         var s = new Stabilizer();
         Assert.Null(s.Feed(T("Hold the line men")));
-        Assert.Equal("Hold the 1ine men", Shown(s.Feed(T("Hold the 1ine men"))));
+        Assert.Equal("Hold the Iine men", Shown(s.Feed(T("Hold the Iine men"))));
     }
 }

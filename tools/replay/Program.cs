@@ -45,7 +45,7 @@ var cache = new MemCache();
 var chain = new TranslationChain(cache, new FakeTr());
 using var w2 = new StreamWriter(outp + ".reads.tsv");
 var timed = new TimedOcr(ocr, _ => { });
-var pipe = new SubtitlePipeline(src, timed, chain, sink, "replay", new LatencyStats(), () => now, 10);
+var pipe = new SubtitlePipeline(src, timed, chain, sink, "replay", new LatencyStats(), () => now, 10, () => new RegionF(0, 0, 1, 1));
 pipe.Log = e => w2.WriteLine($"{e.TimeMs}\t{(e.Changed ? 1 : 0)}\t{e.Raw}\t{e.Cleaned}\t{e.Event}");
 pipe.Start();
 long busyUntil = 0;
@@ -63,7 +63,7 @@ for (int i = 0; i < files.Length; i++)
     await Task.Delay(3);
 }
 pipe.Stop();
-File.WriteAllLines(outp + ".shown.txt", sink.Shown.Select(s => $"{s.t}\t{s.text}"));
+File.WriteAllLines(outp + ".shown.txt", sink.Shown.Select(s => $"{s.t}\t{s.text}\t{(s.box is null ? "" : string.Join(",", new[]{s.box.X, s.box.Y, s.box.W, s.box.H}.Select(v => v.ToString("F5", System.Globalization.CultureInfo.InvariantCulture))))}\t{s.lines}\t{(s.top ? 1 : 0)}"));
 Console.WriteLine($"frames={files.Length} shown={sink.Shown.Count} avgOcrMs={timed.AvgMs:F0}");
 
 sealed class FakeSource : IFrameSource
@@ -81,8 +81,8 @@ sealed class TimedOcr(IOcrEngine inner, Action<long> unused) : IOcrEngine
 }
 sealed class Sink(Func<long> clock) : ISubtitleSink
 {
-    public List<(long t, string text)> Shown = new();
-    public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1) { lock (Shown) Shown.Add((clock(), text)); }
+    public List<(long t, string text, RegionF? box, int lines, bool top)> Shown = new();
+    public void Show(IReadOnlyList<ShownUtterance> u, RegionF? box = null, int lineCount = 1, bool anchorTop = false) { lock (Shown) Shown.Add((clock(), string.Join(" § ", u.Select(x => (x.Speaker is null ? "" : x.Speaker + ": ") + x.Text)), box, lineCount, anchorTop)); }
     public void Clear() { }
 }
 sealed class MemCache : ITranslationCache

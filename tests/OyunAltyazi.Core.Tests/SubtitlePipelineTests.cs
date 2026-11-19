@@ -31,7 +31,8 @@ public class SubtitlePipelineTests
         public List<string> Shown = new();
         public int Clears;
         public RegionF? LastBox;
-        public void Show(string? s, string t, TranslationSource src, RegionF? box = null, int lineCount = 1) { LastBox = box; lock (Shown) Shown.Add(t); }
+        public IReadOnlyList<ShownUtterance> LastItems = [];
+        public void Show(IReadOnlyList<ShownUtterance> u, RegionF? box = null, int lineCount = 1, bool anchorTop = false) { LastBox = box; LastItems = u; lock (Shown) Shown.Add(string.Join(" ", u.Select(x => x.Text))); }
         public void Clear() => Interlocked.Increment(ref Clears);
         public string[] Snapshot() { lock (Shown) return Shown.ToArray(); }
     }

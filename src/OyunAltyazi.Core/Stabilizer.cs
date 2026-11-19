@@ -8,15 +8,28 @@ public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 
 {
     private string? _shownCanon;
     private bool _shownGarbled;
-    private void ResetPending() { _pendingCanon = null; _pendingText = null; _pendingCount = 0; }
+    private bool _pendingIsUpgrade;
+    private void ResetPending() { _pendingCanon = null; _pendingText = null; _pendingCount = 0; _pendingIsUpgrade = false; }
     private static int WordCount(string c) => c.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     private string? _pendingCanon;
     private SubtitleText? _pendingText;
     private int _pendingCount;
     private int _emptyCount;
 
+    /// <summary>The read is (a noisy re-read of) the line this stabilizer shows or is about to show.</summary>
+    public bool Matches(string text)
+    {
+        var c = TextKey.Canon(text);
+        return c.Length > 0 && ((_shownCanon is not null && SameLine(c, _shownCanon)) || (_pendingCanon is not null && SameLine(c, _pendingCanon)));
+    }
+
+    private int _shownScore;
+    private bool _upgraded;
+
     public StabilizerEvent? Feed(SubtitleText? read)
     {
+        // Gibberish gate: a read that is not mostly English words / names is treated as "nothing readable" (never pending, never shown).
+        if (read is not null && !TextQuality.Passes(read.Text)) read = null;
         if (read is null)
         {
             _pendingCanon = null; _pendingText = null; _pendingCount = 0;
@@ -33,15 +46,24 @@ public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 
         var c = TextKey.Canon(read.Text);
         if (c.Length == 0) return null;
 
-        bool garbled = Garbled(read.Text);
+        // Any misspelled word counts as "garbled": such a read must repeat longer (a clean re-read usually follows within a second).
+        bool garbled = Garbled(read.Text) || OcrNoise.LooksGarbled(read.Text) || TextQuality.Measure(read.Text).Bad > 0;
         if (_shownCanon is not null)
         {
             if (ScrolledOut(c, _shownCanon)) { ResetPending(); return null; }
+            // A noisy re-read of the shown sentence that is no better than it (GameTranslator TextMatch.IsWorseReread) is not a new line.
+            if (!SameLine(c, _shownCanon) && (TextMatch.IsWorseReread(c, _shownCanon) ||
+                (Similarity(c, _shownCanon) >= 0.6 && TextQuality.Score(read.Text) <= _shownScore))) { ResetPending(); return null; }
             if (SameLine(c, _shownCanon))
             {
                 // Same line again. Only an upgrade (clean re-read of a line first shown garbled/partial) may replace it.
-                bool upgrade = !garbled && (_shownGarbled || WordCount(c) >= WordCount(_shownCanon) + 2);
+                // Replace a shown line only by a clearly better read of the SAME line, once (no flip-flopping Turkish):
+                // higher word-quality score, or a fuller read (>= 2 more words) that is not worse.
+                int q = TextQuality.Score(read.Text);
+                bool upgrade = !_upgraded && !garbled &&
+                    (q >= _shownScore + TextQuality.UpgradeMargin || (WordCount(c) >= WordCount(_shownCanon) + 2 && q >= _shownScore));
                 if (!upgrade) { ResetPending(); return null; }
+                _pendingIsUpgrade = true;
             }
         }
 
@@ -58,7 +80,8 @@ public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 
         // Garbled (fade / compression-damaged) reads need more agreement before they are shown.
         if (_pendingCount >= (garbled ? confirmReads + 2 : confirmReads) || (_pendingCount == 1 && IsCompleteSentence(read.Text)))
         {
-            _shownCanon = c; _shownGarbled = garbled; ResetPending();
+            _upgraded = _pendingIsUpgrade && _shownCanon is not null && SameLine(c, _shownCanon);
+            _shownCanon = c; _shownGarbled = garbled; _shownScore = TextQuality.Score(read.Text); ResetPending();
             return new ShowLine(read);
         }
         return null;
@@ -69,6 +92,7 @@ public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 
     public static bool SameLine(string a, string b)
     {
         if (Similarity(a, b) >= 0.85) return true;
+        if (TextMatch.IsSameSubtitle(a, b)) return true;
         var ta = a.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 4).ToArray();
         var tb = b.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 4).ToArray();
         if (ta.Length == 0 || tb.Length == 0) return false;

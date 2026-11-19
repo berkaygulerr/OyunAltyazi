@@ -48,7 +48,7 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
     // The captured game window (what the OCR boxes are relative to), in DIPs relative to the overlay's top-left.
     private bool _haveFrame;
     private int _frameX, _frameY, _frameW, _frameH, _ovX, _ovY; // physical px: captured frame rect and overlay origin
-    private (string? Speaker, string Text, TranslationSource Source, RegionF? Box, int Lines)? _current;
+    private (IReadOnlyList<ShownUtterance> Items, RegionF? Box, int Lines, bool Top)? _current;
 
     /// <summary>Region the OCR reads (window fractions); its width caps how wide the Turkish box may grow.</summary>
     public Func<RegionF>? RegionProvider { get; set; }
@@ -124,19 +124,28 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         return fg == _game || fg == new WindowInteropHelper(this).Handle;
     }
 
-    public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1)
+    public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1) =>
+        Show([new ShownUtterance(speaker, text, source)], box, lineCount, false);
+
+    /// <summary>All current utterances, stacked in on-screen order inside one bubble group (each with its own coloured speaker name).</summary>
+    public void Show(IReadOnlyList<ShownUtterance> utterances, RegionF? box = null, int lineCount = 1, bool anchorTop = false)
     {
-        Dispatcher.InvokeAsync(() => { _current = (speaker, text, source, box, lineCount); Render(); });
+        Dispatcher.InvokeAsync(() => { _current = (utterances, box, lineCount, anchorTop); Render(); });
     }
 
-    private static void Fill(TextBlock tb, string? speaker, string text, TranslationSource source)
+    public static void Fill(TextBlock tb, IReadOnlyList<ShownUtterance> items)
     {
         tb.Inlines.Clear();
-        if (!string.IsNullOrEmpty(speaker))
-            tb.Inlines.Add(new System.Windows.Documents.Run(speaker + ": ")
-                { Foreground = new SolidColorBrush(Color.FromRgb(0x4F, 0xD1, 0xC5)), FontWeight = FontWeights.Bold });
-        tb.Inlines.Add(new System.Windows.Documents.Run(text)
-            { FontStyle = source == TranslationSource.Fallback ? FontStyles.Italic : FontStyles.Normal });
+        for (int i = 0; i < items.Count; i++)
+        {
+            var u = items[i];
+            if (i > 0) tb.Inlines.Add(new System.Windows.Documents.LineBreak());
+            if (!string.IsNullOrEmpty(u.Speaker))
+                tb.Inlines.Add(new System.Windows.Documents.Run(u.Speaker + ": ")
+                    { Foreground = new SolidColorBrush(Color.FromRgb(0x4F, 0xD1, 0xC5)), FontWeight = FontWeights.Bold });
+            tb.Inlines.Add(new System.Windows.Documents.Run(u.Text)
+                { FontStyle = u.Source == TranslationSource.Fallback ? FontStyles.Italic : FontStyles.Normal });
+        }
     }
 
     /// <summary>Applies a changed style (e.g. the cover toggle) and redraws the current line.</summary>
@@ -158,7 +167,7 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         bool cover = _style.CoverOriginal && c.Box is { W: > 0, H: > 0 } && _haveFrame;
         var dpi = VisualTreeHelper.GetDpi(this);
         Text.FontSize = _style.FontSize;
-        Fill(Text, c.Speaker, c.Text, c.Source);
+        Fill(Text, c.Items);
         double op = cover ? _style.CoverOpacity : _style.BackgroundOpacity;
         Box.Background = new SolidColorBrush(Color.FromArgb((byte)(Math.Clamp(op, 0, 1) * 255), 0, 0, 0));
         Box.Visibility = Visibility.Visible;
@@ -179,7 +188,7 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         Box.Margin = new Thickness(0);
         Box.Measure(new System.Windows.Size(ActualWidth, ActualHeight));
         var d = Box.DesiredSize;
-        var (x, y) = CoverLayout.Place(d.Width, d.Height, eng, ActualWidth, ActualHeight);
+        var (x, y) = CoverLayout.Place(d.Width, d.Height, eng, ActualWidth, ActualHeight, c.Top);
         Box.Margin = new Thickness(x, y, 0, 0);
         Box.UpdateLayout();
     }

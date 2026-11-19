@@ -19,7 +19,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Forwards subtitles to the overlay and mirrors the last line in the main window.</summary>
     private sealed class TeeSink(ISubtitleSink inner, Action<string?, string, TranslationSource> onShow) : ISubtitleSink
     {
-        public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1) { inner.Show(speaker, text, source, box, lineCount); onShow(speaker, text, source); }
+        public void Show(IReadOnlyList<ShownUtterance> utterances, RegionF? box = null, int lineCount = 1, bool anchorTop = false) { inner.Show(utterances, box, lineCount, anchorTop); foreach (var u in utterances) onShow(u.Speaker, u.Text, u.Source); }
         public void Clear() => inner.Clear();
     }
 
