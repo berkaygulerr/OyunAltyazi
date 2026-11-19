@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -12,6 +13,7 @@ namespace OyunAltyazi.App;
 public partial class App : Application
 {
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 
     public SettingsStore Settings { get; private set; } = null!;
     public SqliteTranslationCache Cache { get; private set; } = null!;
@@ -54,6 +56,8 @@ public partial class App : Application
             Shutdown(2);
             return;
         }
+        keybd_event(0x12, 0, 0, UIntPtr.Zero); // Alt press/release lifts the foreground lock
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
         SetForegroundWindow(target.Hwnd);
         var overlay = new OverlayWindow();
         overlay.Attach(target.Hwnd, new OverlayStyle());
