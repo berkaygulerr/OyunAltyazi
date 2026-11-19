@@ -10,5 +10,10 @@
             <TextBlock x:Name="Text" Foreground="White" FontFamily="Segoe UI" FontSize="30"
                        TextWrapping="Wrap" TextAlignment="Center"/>
         </Border>
+        <Canvas x:Name="CoverLayer">
+            <Border x:Name="CoverBox" Visibility="Collapsed" CornerRadius="8" Padding="10,4" Background="#EB121212">
+                <TextBlock x:Name="CoverText" Foreground="White" FontFamily="Segoe UI" TextWrapping="Wrap" TextAlignment="Center"/>
+            </Border>
+        </Canvas>
     </Grid>
 </Window>

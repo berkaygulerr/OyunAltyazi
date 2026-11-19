@@ -8,8 +8,13 @@ public static class TextCleaner
     private static readonly Regex Speaker = new(@"^([A-Z][A-Za-z0-9 .'\-]{0,24}):\s+(.+)$", RegexOptions.Compiled);
     private static readonly Regex Confusable = new(@"[A-Za-z01|]+", RegexOptions.Compiled);
 
-    public static SubtitleText? Clean(OcrResult ocr)
+    public static SubtitleText? Clean(OcrResult ocr) => Clean(ocr, out _);
+
+    /// <summary>Like Clean, also returning the union box (region-relative 0..1) of the OCR lines that made it into the text.</summary>
+    public static SubtitleText? Clean(OcrResult ocr, out RegionF? box)
     {
+        box = null;
+        var keptLines = new List<OcrLine>();
         var kept = new List<string>();
         foreach (var line in ocr.Lines.OrderBy(l => l.Top))
         {
@@ -21,6 +26,7 @@ public static class TextCleaner
             if (ButtonHint.IsMatch(t)) continue;
             if ((double)letters / nonSpace < 0.5) continue;
             kept.Add(t);
+            keptLines.Add(line);
         }
         if (kept.Count == 0) return null;
 
@@ -29,6 +35,9 @@ public static class TextCleaner
         int words = joined.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         if (words < 2 && totalLetters < 4) return null;
 
+        double l = keptLines.Min(k => k.Left), t0 = keptLines.Min(k => k.Top);
+        double r = keptLines.Max(k => k.Left + k.Width), b = keptLines.Max(k => k.Top + k.Height);
+        box = new RegionF(l, t0, r - l, b - t0);
         var m = Speaker.Match(joined);
         return m.Success ? new SubtitleText(m.Groups[1].Value, m.Groups[2].Value) : new SubtitleText(null, joined);
     }

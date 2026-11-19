@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     /// <summary>Forwards subtitles to the overlay and mirrors the last line in the main window.</summary>
     private sealed class TeeSink(ISubtitleSink inner, Action<string?, string, TranslationSource> onShow) : ISubtitleSink
     {
-        public void Show(string? speaker, string text, TranslationSource source) { inner.Show(speaker, text, source); onShow(speaker, text, source); }
+        public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null) { inner.Show(speaker, text, source, box); onShow(speaker, text, source); }
         public void Clear() => inner.Clear();
     }
 
@@ -32,6 +32,8 @@ public partial class MainWindow : Window
     private IFrameSource? _source;
     private SubtitlePipeline? _pipeline;
     private bool _suppressSelection;
+    private bool _detecting, _forceDetect;
+    private RegionF _band = RegionDetector.DefaultBand;
 
     private void UpdateTranslatorWarning()
     {
@@ -114,6 +116,7 @@ public partial class MainWindow : Window
             var s = _app.Settings.Load();
             if (s.LastExe != info.ExeName) _app.Settings.Save(s with { LastExe = info.ExeName });
         }
+        CoverCheck.IsChecked = _profile?.Overlay.CoverOriginal ?? true;
         UpdateButtons();
     }
 
@@ -122,6 +125,7 @@ public partial class MainWindow : Window
         StartBtn.IsEnabled = _app.Ocr is not null && (Running || _selected is not null);
         StartBtn.Content = Running ? "■ Durdur" : "▶ Başlat";
         SelectRegionBtn.IsEnabled = _selected is not null;
+        AutoDetectBtn.IsEnabled = _selected is not null && _app.Ocr is not null;
         WindowCombo.IsEnabled = !Running;
     }
 
@@ -132,8 +136,28 @@ public partial class MainWindow : Window
         ApplySelection((WindowCombo.SelectedItem as Item)?.Info);
     }
 
+    private void CoverCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_profile is null) return;
+        _profile = _profile with { Overlay = _profile.Overlay with { CoverOriginal = CoverCheck.IsChecked == true } };
+        if (_app.Settings.HasProfile(_profile.ExeName))
+        {
+            var s = _app.Settings.Load();
+            var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase) { [_profile.ExeName] = _profile };
+            _app.Settings.Save(s with { Profiles = profiles });
+        }
+        _overlay.SetStyle(_profile.Overlay);
+    }
+
     private void Refresh_Click(object sender, RoutedEventArgs e) { if (!Running) RefreshList(); }
     private void SelectRegion_Click(object sender, RoutedEventArgs e) => SelectRegion();
+    private void AutoDetect_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected is null) return;
+        if (Running) StopRun();
+        _forceDetect = true;
+        ToggleRun();
+    }
     private void Start_Click(object sender, RoutedEventArgs e) => ToggleRun();
 
     private void SelectRegion()
@@ -143,7 +167,8 @@ public partial class MainWindow : Window
         if (snap is null) { StatusText.Text = "Pencere görüntüsü alınamadı (küçültülmüş ya da kapanmış olabilir)."; return; }
         var dlg = new RegionSelector(snap, _profile.Region) { Owner = this };
         if (dlg.ShowDialog() != true) return;
-        _profile = _profile with { Region = dlg.Result };
+        _profile = _profile with { Region = dlg.Result, AutoDetected = false };
+        _detecting = false; _forceDetect = false;
         var s = _app.Settings.Load();
         var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase)
         {
@@ -159,15 +184,32 @@ public partial class MainWindow : Window
         if (_app.Ocr is null || _selected is null || _profile is null) return;
         var profile = _profile;
         _overlay.Attach(_selected.Hwnd, profile.Overlay);
-        var source = new WgcFrameSource(_selected.Hwnd, () => _profile!.Region);
+        _detecting = _forceDetect || !_app.Settings.HasProfile(profile.ExeName);
+        _forceDetect = false;
+        Func<RegionF> region = () => _detecting ? _band : _profile!.Region;
+        var source = new WgcFrameSource(_selected.Hwnd, region);
         var sink = new TeeSink(_overlay, ShowLast);
         _source = source;
         source.Stopped += OnSourceStopped;
-        _pipeline = new SubtitlePipeline(source, _app.Ocr, _app.Chain, sink, profile.ExeName, _app.Stats, () => Environment.TickCount64);
+        _pipeline = new SubtitlePipeline(source, _app.Ocr, _app.Chain, sink, profile.ExeName, _app.Stats, () => Environment.TickCount64,
+                                         regionProvider: region, detector: _detecting ? new RegionDetector() : null);
+        _pipeline.RegionDetected += OnRegionDetected;
+        _pipeline.DetectionProgress += n => { if (_detecting) Dispatcher.InvokeAsync(() => { if (_detecting) StatusText.Text = $"Altyazı bölgesi aranıyor… ({n}/3)"; }); };
         _pipeline.Start();
-        StatusText.Text = "Çalışıyor…";
+        StatusText.Text = _detecting ? "Altyazı bölgesi aranıyor… (0/3)" : "Çalışıyor…";
         UpdateButtons();
     }
+
+    private void OnRegionDetected(RegionF found) => Dispatcher.InvokeAsync(() =>
+    {
+        if (!_detecting || _profile is null) return;
+        _profile = _profile with { Region = found, AutoDetected = true };
+        _detecting = false;
+        var s = _app.Settings.Load();
+        var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase) { [_profile.ExeName] = _profile };
+        _app.Settings.Save(s with { Profiles = profiles, LastExe = _profile.ExeName });
+        StatusText.Text = "Altyazı bölgesi bulundu ve kaydedildi (otomatik). Çalışıyor…";
+    });
 
     private void StopRun()
     {

@@ -9,6 +9,7 @@
     </Window.Resources>
     <StackPanel Margin="16">
         <DockPanel Margin="0,0,0,12">
+            <Button x:Name="AutoDetectBtn" DockPanel.Dock="Right" Content="Otomatik bul" Margin="8,0,0,0" Click="AutoDetect_Click"/>
             <Button x:Name="SelectRegionBtn" DockPanel.Dock="Right" Content="Bölge seç" Margin="8,0,0,0" Click="SelectRegion_Click"/>
             <Button x:Name="RefreshBtn" DockPanel.Dock="Right" Content="⟳" ToolTip="Pencere listesini yenile" Margin="8,0,0,0" Click="Refresh_Click"/>
             <TextBlock Text="Oyun:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -21,6 +22,7 @@
             </ComboBox>
             <Button x:Name="StartBtn" Content="▶ Başlat" HorizontalAlignment="Left" Click="Start_Click"/>
         </DockPanel>
+        <CheckBox x:Name="CoverCheck" Content="Üstüne yaz (İngilizceyi ört)" Foreground="#E6E6E6" IsChecked="True" Margin="0,0,0,8" Click="CoverCheck_Click"/>
         <TextBlock x:Name="WarningText" Foreground="#F6AD55" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
         <TextBlock x:Name="StatusText" Foreground="#A0AEC0" Margin="0,0,0,8"/>
         <TextBlock x:Name="LastLineText" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,12" Text="Son satır: —"/>

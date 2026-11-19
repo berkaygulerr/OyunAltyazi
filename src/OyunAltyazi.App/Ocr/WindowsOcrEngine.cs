@@ -48,7 +48,9 @@ public sealed class WindowsOcrEngine : IOcrEngine
             if (line.Words.Count == 0) continue;
             double top = line.Words.Min(x => x.BoundingRect.Top);
             double bottom = line.Words.Max(x => x.BoundingRect.Bottom);
-            lines.Add(new OcrLine(line.Text, top / h, (bottom - top) / h));
+            double left = line.Words.Min(x => x.BoundingRect.Left);
+            double right = line.Words.Max(x => x.BoundingRect.Right);
+            lines.Add(new OcrLine(line.Text, top / h, (bottom - top) / h, left / w, (right - left) / w));
         }
         return new OcrResult(lines);
     }

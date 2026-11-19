@@ -2,8 +2,9 @@ using System.Text.Json;
 
 namespace OyunAltyazi.Core;
 
-public sealed record OverlayStyle(double FontSize = 30, double BackgroundOpacity = 0.65, double BottomMargin = 0.08);
-public sealed record GameProfile(string ExeName, RegionF Region, OverlayStyle Overlay);
+public sealed record OverlayStyle(double FontSize = 30, double BackgroundOpacity = 0.65, double BottomMargin = 0.08,
+                                  bool CoverOriginal = true, double CoverOpacity = 0.92);
+public sealed record GameProfile(string ExeName, RegionF Region, OverlayStyle Overlay, bool AutoDetected = false);
 public sealed record AppSettings(string Translator = "auto", Dictionary<string, GameProfile>? Profiles = null, string? LastExe = null);
 
 public sealed class SettingsStore(string directory)
@@ -35,6 +36,9 @@ public sealed class SettingsStore(string directory)
         File.WriteAllText(tmp, JsonSerializer.Serialize(s, Json));
         File.Move(tmp, FilePath, overwrite: true);
     }
+
+    public bool HasProfile(string exeName) =>
+        Load().Profiles?.Keys.Any(k => string.Equals(k, exeName, StringComparison.OrdinalIgnoreCase)) == true;
 
     public GameProfile ProfileFor(string exeName)
     {

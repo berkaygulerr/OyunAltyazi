@@ -23,14 +23,15 @@ public class SubtitlePipelineTests
             Interlocked.Increment(ref Calls);
             if (Gate != null) await Gate.Task;
             var t = Texts.GetValueOrDefault(f.Bgra[0], "");
-            return new OcrResult(t.Length == 0 ? [] : [new OcrLine(t, 0, 0.5)]);
+            return new OcrResult(t.Length == 0 ? [] : [new OcrLine(t, 0.25, 0.5, 0.2, 0.6)]);
         }
     }
     private sealed class Sink : ISubtitleSink
     {
         public List<string> Shown = new();
         public int Clears;
-        public void Show(string? s, string t, TranslationSource src) { lock (Shown) Shown.Add(t); }
+        public RegionF? LastBox;
+        public void Show(string? s, string t, TranslationSource src, RegionF? box = null) { LastBox = box; lock (Shown) Shown.Add(t); }
         public void Clear() => Interlocked.Increment(ref Clears);
         public string[] Snapshot() { lock (Shown) return Shown.ToArray(); }
     }
@@ -62,12 +63,21 @@ public class SubtitlePipelineTests
         public Rig()
         {
             Ocr.Texts[10] = A; Ocr.Texts[200] = B;
-            P = new SubtitlePipeline(Src, Ocr, new TranslationChain(new Mem(), Tr), Sink, "g", Stats, () => Clock);
+            P = new SubtitlePipeline(Src, Ocr, new TranslationChain(new Mem(), Tr), Sink, "g", Stats, () => Clock, 10, () => new RegionF(0, 0.6, 1, 0.4));
             P.Start();
         }
         public void Send(byte v) { Src.Send(F(v, Clock)); Clock += 200; }
     }
     private static async Task WaitFor(Func<bool> c) { for (int i = 0; i < 200 && !c(); i++) await Task.Delay(10); }
+
+    [Fact] public async Task Box_is_converted_to_window_coordinates_and_passed_to_sink()
+    {
+        var r = new Rig();
+        r.Send(10); r.Send(10);
+        await WaitFor(() => r.Sink.Snapshot().Length == 1);
+        var b = r.Sink.LastBox!;
+        Assert.Equal(0.2, b.X, 3); Assert.Equal(0.7, b.Y, 3); Assert.Equal(0.6, b.W, 3); Assert.Equal(0.2, b.H, 3);
+    }
 
     [Fact] public async Task Shows_translation_after_stable_read()
     {
