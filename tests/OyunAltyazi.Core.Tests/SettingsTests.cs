@@ -9,7 +9,7 @@ public class SettingsTests : IDisposable
     [Fact] public void Missing_file_gives_defaults()
     {
         var s = new SettingsStore(_dir).Load();
-        Assert.Equal("google", s.Translator); Assert.Null(s.Profiles); Assert.Null(s.LastExe);
+        Assert.Equal("auto", s.Translator); Assert.Null(s.Profiles); Assert.Null(s.LastExe);
     }
 
     [Fact] public void Roundtrip()
@@ -42,7 +42,7 @@ public class SettingsTests : IDisposable
         Directory.CreateDirectory(_dir);
         File.WriteAllText(Path.Combine(_dir, "settings.json"), "{ not json");
         var s = new SettingsStore(_dir).Load();
-        Assert.Equal("google", s.Translator);
+        Assert.Equal("auto", s.Translator);
         Assert.True(File.Exists(Path.Combine(_dir, "settings.json.bak")));
     }
 }

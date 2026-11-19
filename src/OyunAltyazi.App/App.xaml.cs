@@ -31,15 +31,33 @@ public partial class App : Application
         Directory.CreateDirectory(dir);
         Settings = new SettingsStore(dir);
         Cache = new SqliteTranslationCache(Path.Combine(dir, "cache.db"));
-        var translator = new GoogleTranslator(new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
-        TranslatorName = translator.Name;
-        Chain = new TranslationChain(Cache, translator);
+        SetTranslator(Settings.Load().Translator);
         Ocr = WindowsOcrEngine.TryCreate();
         new MainWindow().Show();
     }
 
+    private readonly GoogleTranslator _google = new(new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
+    private Ct2Translator? _ct2;
+    public bool LocalInstalled => Ct2Paths.IsInstalled();
+
+    /// <summary>choice: "auto" | "ct2" | "google_only". Yerel model yoksa Google kullanılır.</summary>
+    public void SetTranslator(string choice)
+    {
+        ITranslator t = _google;
+        bool wantLocal = choice != "google_only" && choice != "google_forced";
+        if (wantLocal && LocalInstalled)
+        {
+            _ct2 ??= new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.VenvPython, Ct2Paths.FindServerScript()!, Ct2Paths.ModelDir));
+            _ = _ct2.WarmUpAsync();
+            t = _ct2;
+        }
+        TranslatorName = t.Name == "ct2" ? "Yerel (CTranslate2, GPU)" : "Google";
+        Chain = new TranslationChain(Cache, t);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _ct2?.Dispose();
         Cache?.Dispose();
         base.OnExit(e);
     }

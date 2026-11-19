@@ -15,7 +15,10 @@
             <ComboBox x:Name="WindowCombo" SelectionChanged="WindowCombo_SelectionChanged"/>
         </DockPanel>
         <DockPanel Margin="0,0,0,12">
-            <TextBlock x:Name="TranslatorText" DockPanel.Dock="Right" VerticalAlignment="Center"/>
+            <ComboBox x:Name="TranslatorCombo" DockPanel.Dock="Right" MinWidth="190" SelectionChanged="TranslatorCombo_SelectionChanged">
+                <ComboBoxItem Tag="auto" Content="Yerel (CTranslate2, GPU)"/>
+                <ComboBoxItem Tag="google_only" Content="Google"/>
+            </ComboBox>
             <Button x:Name="StartBtn" Content="▶ Başlat" HorizontalAlignment="Left" Click="Start_Click"/>
         </DockPanel>
         <TextBlock x:Name="WarningText" Foreground="#F6AD55" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>

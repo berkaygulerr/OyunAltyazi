@@ -33,12 +33,32 @@ public partial class MainWindow : Window
     private SubtitlePipeline? _pipeline;
     private bool _suppressSelection;
 
+    private void UpdateTranslatorWarning()
+    {
+        if (TranslatorCombo.SelectedIndex == 0 && !_app.LocalInstalled)
+        {
+            WarningText.Text = "Yerel model kurulu değil: tools\\ct2server\\setup.ps1 çalıştırın (şimdilik Google kullanılıyor).";
+            WarningText.Visibility = Visibility.Visible;
+        }
+        else if (_app.Ocr is not null && WgcFrameSource.IsSupported) WarningText.Visibility = Visibility.Collapsed;
+    }
+
+    private void TranslatorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || Running) { if (Running) TranslatorCombo.SelectedIndex = _app.TranslatorName == "Google" ? 1 : 0; return; }
+        var choice = (string)((ComboBoxItem)TranslatorCombo.SelectedItem).Tag;
+        _app.SetTranslator(choice);
+        _app.Settings.Save(_app.Settings.Load() with { Translator = choice });
+        UpdateTranslatorWarning();
+    }
+
     private bool Running => _pipeline is not null;
 
     public MainWindow()
     {
         InitializeComponent();
-        TranslatorText.Text = "Çevirmen: " + _app.TranslatorName;
+        TranslatorCombo.SelectedIndex = _app.Settings.Load().Translator == "google_only" ? 1 : 0;
+        UpdateTranslatorWarning();
         if (_app.Ocr is null)
         {
             WarningText.Text = "Windows İngilizce OCR paketi gerekli: Ayarlar › Zaman ve dil › Dil › İngilizce (ABD) ekleyin.";

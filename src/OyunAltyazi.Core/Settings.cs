@@ -4,7 +4,7 @@ namespace OyunAltyazi.Core;
 
 public sealed record OverlayStyle(double FontSize = 30, double BackgroundOpacity = 0.65, double BottomMargin = 0.08);
 public sealed record GameProfile(string ExeName, RegionF Region, OverlayStyle Overlay);
-public sealed record AppSettings(string Translator = "google", Dictionary<string, GameProfile>? Profiles = null, string? LastExe = null);
+public sealed record AppSettings(string Translator = "auto", Dictionary<string, GameProfile>? Profiles = null, string? LastExe = null);
 
 public sealed class SettingsStore(string directory)
 {
