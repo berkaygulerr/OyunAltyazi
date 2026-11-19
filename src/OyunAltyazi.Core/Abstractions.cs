@@ -20,3 +20,22 @@ public sealed class TranslatorException(string message, int? statusCode = null) 
 {
     public int? StatusCode { get; } = statusCode;
 }
+
+public interface IFrameSource : IDisposable
+{
+    event Action<Frame>? FrameArrived;
+    event Action<string>? Stopped;
+    void Start();
+    void Stop();
+}
+
+public interface IOcrEngine
+{
+    Task<OcrResult> ReadAsync(Frame frame, CancellationToken ct);
+}
+
+public interface ISubtitleSink
+{
+    void Show(string? speaker, string text, TranslationSource source);
+    void Clear();
+}
