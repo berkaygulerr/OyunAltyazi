@@ -8,50 +8,21 @@ public readonly record struct DipRect(double X, double Y, double Width, double H
     public double CenterY => Y + Height / 2;
 }
 
-/// <summary>Result of measuring wrapped text: widest line, total height, line count (all in DIPs).</summary>
-public readonly record struct TextMetrics(double Width, double Height, int Lines);
-
-/// <summary>Measures speaker+text at a font size, wrapped to maxWidth DIPs.</summary>
-public delegate TextMetrics TextMeasure(string? speaker, string text, double fontSize, double maxWidth);
-
-public readonly record struct CoverFit(DipRect Box, double FontSize, int Lines);
-
 public static class CoverLayout
 {
-    public const double MinFont = 24, DefaultFont = 32, PadH = 12, PadV = 6, MaxLines = 3, LineHeightFactor = 1.15;
+    public const double DefaultFont = 32, Pad = 6;
 
     /// <summary>
-    /// Places the Turkish text over the English box with OUR font size (fontSize, not derived from the English).
-    /// The font only shrinks (1 DIP steps, floor 24) when the text needs more than 3 lines within maxWidth.
-    /// Box = max(English+pad, text+pad), centred horizontally on the English box, bottom aligned to the English bottom (+pad)
-    /// so a taller box grows upward; clamped inside bounds when given (never at the cost of covering the English box).
+    /// Position only: element centred horizontally on the English box, bottom at English bottom + Pad (grows upward),
+    /// clamped so it stays fully inside the overlay (when it fits).
     /// </summary>
-    public static CoverFit Fit(DipRect english, string text, string? speaker, double maxWidth, double fontSize, TextMeasure measure, DipRect? bounds = null)
+    public static (double X, double Y) Place(double width, double height, DipRect english, double overlayW, double overlayH)
     {
-        double minW = english.Width + 2 * PadH;
-        double boxMaxW = Math.Max(maxWidth, minW);
-        double textMaxW = boxMaxW - 2 * PadH;
-        double fs = fontSize;
-        double floor = Math.Min(MinFont, fs);
-        TextMetrics m;
-        while (true)
-        {
-            m = measure(speaker, text, fs, textMaxW);
-            if (m.Lines <= MaxLines || fs <= floor) break;
-            fs -= 1;
-        }
-        double w = Math.Min(boxMaxW, Math.Max(minW, Math.Ceiling(m.Width) + 2 * PadH));
-        double h = Math.Max(english.Height + 2 * PadV, Math.Ceiling(m.Height) + 2 * PadV);
-        double x = english.CenterX - w / 2;
-        double y = english.Bottom + PadV - h;
-        if (bounds is { } r)
-        {
-            x = Math.Max(r.X, Math.Min(x, r.Right - w));
-            y = Math.Max(r.Y, Math.Min(y, r.Bottom - h));
-            x = Math.Min(x, english.X); x = Math.Max(x, english.Right - w);
-            y = Math.Min(y, english.Y); y = Math.Max(y, english.Bottom - h);
-        }
-        return new CoverFit(new DipRect(x, y, w, h), fs, m.Lines);
+        double x = english.CenterX - width / 2;
+        double y = english.Bottom + Pad - height;
+        x = Math.Max(0, Math.Min(x, overlayW - width));
+        y = Math.Max(0, Math.Min(y, overlayH - height));
+        return (x, y);
     }
 }
 

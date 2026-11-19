@@ -164,7 +164,7 @@ $s.AutoSize=$false; $s.TextAlign='MiddleCenter'; $s.Left=0; $s.Width=1600; $s.He
             await Task.Delay(400);
             after?.Dispose();
             after = Shot(frame);
-            coverFound = Bounds(after, coverStrip, c => Math.Abs(c.R - 18) < 4 && Math.Abs(c.G - 18) < 4 && Math.Abs(c.B - 18) < 4);
+            coverFound = Bounds(after, coverStrip, c => c.R < 6 && c.G < 6 && c.B < 6);
         }
         var dir = Environment.GetEnvironmentVariable("OA_SHOT_DIR");
         if (!string.IsNullOrEmpty(dir))
@@ -191,10 +191,69 @@ $s.AutoSize=$false; $s.TextAlign='MiddleCenter'; $s.Left=0; $s.Width=1600; $s.He
         Assert.DoesNotContain(EnglishWords, w => read.Contains(w));
         double trLineH = res.Lines.Max(l => l.Height) * half.Height * 2.5;
         Console.WriteLine($"{shotName}: Turkish OCR line height {trLineH:0.0}px vs English {engLineH:0.0}px ({trLineH / engLineH:0.00})");
-        double cfgPx = new OverlayStyle().FontSize * 2 * CoverLayout.LineHeightFactor; // 200% DPI
+        double cfgPx = new OverlayStyle().FontSize * 2 * 1.33; // 200% DPI, Segoe UI natural line height
         Console.WriteLine($"{shotName}: expected line ~{cfgPx:0.0}px");
         Assert.InRange(trLineH / cfgPx, 0.75, 1.25);
 
         overlay!.Dispatcher.InvokeShutdown();
+    }
+
+    [Fact]
+    public async Task Long_two_sentence_turkish_with_speaker_is_fully_visible_and_covers_english()
+    {
+        SetProcessDpiAwarenessContext(new IntPtr(-4));
+        using var game = new FakeGame(30, "Laswell: John, you know how dangerous this operation is. We all must get out alive.");
+        DwmGetWindowAttribute(game.Hwnd, 9, out var fr, Marshal.SizeOf<RECT>());
+        var frame = new Rectangle(fr.Left, fr.Top, fr.Right - fr.Left, fr.Bottom - fr.Top);
+        int titleBar = frame.Height - 900 - 8;
+        double labelTop = (770 + titleBar) / (double)frame.Height, labelH = 100.0 / frame.Height;
+        var strip = new Rectangle(0, (int)((labelTop - 0.01) * frame.Height), frame.Width, (int)((labelH + 0.02) * frame.Height));
+        OverlayWindow? overlay = null;
+        var ready = new ManualResetEventSlim();
+        var th = new Thread(() =>
+        {
+            overlay = new OverlayWindow();
+            overlay.Attach(game.Hwnd, new OverlayStyle());
+            overlay.ExcludeFromCapture = false;
+            ready.Set();
+            System.Windows.Threading.Dispatcher.Run();
+        }) { IsBackground = true };
+        th.SetApartmentState(ApartmentState.STA); th.Start();
+        Assert.True(ready.Wait(10000));
+        keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        SetForegroundWindow(game.Hwnd);
+        await Task.Delay(1000);
+        Rectangle truth;
+        using (var before = Shot(frame))
+            truth = Bounds(before, strip, c => c.R > 200 && c.G > 200 && c.B > 200) ?? throw new Exception("İngilizce metin bulunamadı");
+        var box = new RegionF((double)truth.Left / frame.Width, (double)truth.Top / frame.Height, (double)truth.Width / frame.Width, (double)truth.Height / frame.Height);
+        overlay!.Show("Laswell", "John, bu operasyonun ne kadar tehlikeli olduğunu biliyorsun. Hepimiz buradan sağ çıkmalıyız.", TranslationSource.Translator, box, 2);
+        var coverStrip = Rectangle.FromLTRB(0, Math.Max(0, strip.Top - 260), frame.Width, strip.Bottom);
+        Bitmap after = null!; Rectangle? cover = null;
+        for (int i = 0; i < 25 && cover is null; i++)
+        {
+            keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+            SetForegroundWindow(game.Hwnd);
+            await Task.Delay(400);
+            after?.Dispose();
+            after = Shot(frame);
+            cover = Bounds(after, coverStrip, c => c.R < 6 && c.G < 6 && c.B < 6);
+        }
+        var dir = Environment.GetEnvironmentVariable("OA_SHOT_DIR");
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+            using var crop = after.Clone(new Rectangle(0, coverStrip.Top - 20, frame.Width, Math.Min(coverStrip.Height + 120, frame.Height - coverStrip.Top + 20)), PixelFormat.Format32bppArgb);
+            crop.Save(Path.Combine(dir, "cover-long-speaker.png"), ImageFormat.Png);
+        }
+        var r = cover ?? throw new Exception("Örtü kutusu bulunamadı");
+        Assert.True(r.Left <= truth.Left + 2 && r.Top <= truth.Top + 2 && r.Right >= truth.Right - 2 && r.Bottom >= truth.Bottom - 2, $"örtü İngilizceyi kapsamıyor {r} {truth}");
+        var m = overlay!.Dispatcher.Invoke(() => overlay.BoxMetrics());
+        Console.WriteLine($"long: actual {m.Actual} desired {m.Desired} screen {m.Screen} cover {r}");
+        Assert.Equal(m.Desired.Width, m.Actual.Width, 0.5);
+        Assert.Equal(m.Desired.Height, m.Actual.Height, 0.5);
+        Assert.True(m.Actual.X >= 0 && m.Actual.Y >= 0 && m.Actual.Right <= m.Screen.Width + 0.5 && m.Actual.Bottom <= m.Screen.Height + 0.5);
+        Assert.True(m.Actual.Height > 60, "iki cümle birden fazla satır olmalı");
+        overlay.Dispatcher.InvokeShutdown();
     }
 }
