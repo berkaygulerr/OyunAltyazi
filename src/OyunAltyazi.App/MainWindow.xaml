@@ -28,6 +28,8 @@
             <Slider x:Name="FontSlider" Minimum="20" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="FontSlider_Changed"/>
         </DockPanel>
         <CheckBox x:Name="ScreenshotCheck" Content="Ekran görüntüsünde göster (hata ayıklama)" Foreground="#E6E6E6" Margin="0,0,0,8" Click="ScreenshotCheck_Click"/>
+        <CheckBox x:Name="DiagCheck" Content="Tanılama günlüğü kaydet" Foreground="#E6E6E6" Margin="0,0,0,8" Click="DiagCheck_Click"
+                  ToolTip="Her okumayı %APPDATA%\OyunAltyazi\logs klasörüne yazar; altyazı kaçarsa bu dosyayı gönderin."/>
         <TextBlock x:Name="WarningText" Foreground="#F6AD55" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
         <TextBlock x:Name="StatusText" Foreground="#A0AEC0" Margin="0,0,0,8"/>
         <TextBlock x:Name="LastLineText" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,12" Text="Son satır: —"/>

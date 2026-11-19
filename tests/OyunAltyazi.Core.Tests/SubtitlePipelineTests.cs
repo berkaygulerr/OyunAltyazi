@@ -121,7 +121,7 @@ public class SubtitlePipelineTests
         var r = new Rig();
         r.Send(10); r.Send(10);
         await WaitFor(() => r.Sink.Snapshot().Length == 1);
-        for (int i = 0; i < 4; i++) r.Send((byte)(100 + i * 20));   // changed frames, OCR returns nothing
+        for (int i = 0; i < 6; i++) r.Send((byte)(30 + i * 20));   // changed frames, OCR returns nothing
         Assert.Equal(1, r.Sink.Clears);
     }
 

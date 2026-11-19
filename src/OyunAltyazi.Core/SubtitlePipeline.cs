@@ -1,5 +1,7 @@
 namespace OyunAltyazi.Core;
 
+public sealed record ReadLogEntry(long TimeMs, bool Changed, string Raw, string Cleaned, string Event);
+
 public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, TranslationChain chain, ISubtitleSink sink,
                                      string game, LatencyStats stats, Func<long> clockMs, int maxReadsPerSecond = 10,
                                      Func<RegionF>? regionProvider = null, SentenceJoiner? joiner = null) : IDisposable
@@ -12,6 +14,8 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
     private readonly List<string> _recent = new();
     private readonly int _minIntervalMs = 1000 / Math.Max(1, maxReadsPerSecond);
     private int _busy;
+    public Action<ReadLogEntry>? Log { get; set; }
+    public bool IsBusy => Volatile.Read(ref _busy) != 0;
     private long _lastReadMs = long.MinValue;
     private SubtitleText? _lastRead;
     private long _lastCapturedMs, _lastOcrDoneMs;
@@ -77,12 +81,15 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         try
         {
             SubtitleText? read;
-            if (_gate.HasChanged(frame))
+            string raw = "";
+            bool changed = _gate.HasChanged(frame);
+            if (changed)
             {
                 var region = regionProvider?.Invoke() ?? new RegionF(0, 0, 1, 1);
                 _lastCapturedMs = frame.TimestampMs;
                 var result = await ocr.ReadAsync(frame, CancellationToken.None).ConfigureAwait(false);
                 _lastOcrDoneMs = clockMs();
+                raw = string.Join(" | ", result.Lines.Select(l => l.Text));
                 read = TextCleaner.Clean(result, out var rel, out _lastLines, KnownSpeakers());
                 NoteSpeaker(read);
                 _lastRead = read;
@@ -93,7 +100,10 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                 read = _lastRead;
             }
 
-            switch (_stabilizer.Feed(read))
+            var ev = _stabilizer.Feed(read);
+            Log?.Invoke(new ReadLogEntry(frame.TimestampMs, changed, raw, read is null ? "" : (read.Speaker is null ? "" : read.Speaker + ": ") + read.Text,
+                ev switch { ShowLine => "SHOW", ClearLine => "CLEAR", _ => "" }));
+            switch (ev)
             {
                 case ShowLine show:
                     StartTranslation(show.Line, _joiner.Feed(show.Line, clockMs()), _lastBox, _lastLines, _lastCapturedMs, _lastOcrDoneMs, clockMs());

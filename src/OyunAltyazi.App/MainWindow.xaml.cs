@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         UpdateTranslatorWarning();
     }
 
+    private DiagnosticLog? _diagLog;
     private bool Running => _pipeline is not null;
 
     public MainWindow()
@@ -61,6 +62,7 @@ public partial class MainWindow : Window
         UpdateTranslatorWarning();
         var showShots = _app.Settings.Load().ShowInScreenshots;
         ScreenshotCheck.IsChecked = showShots;
+        DiagCheck.IsChecked = _app.Settings.Load().DiagnosticLog;
         _overlay.ExcludeFromCapture = !showShots;
         if (_app.Ocr is null)
         {
@@ -174,6 +176,11 @@ public partial class MainWindow : Window
         _app.Settings.Save(_app.Settings.Load() with { ShowInScreenshots = on });
     }
 
+    private void DiagCheck_Click(object sender, RoutedEventArgs e) =>
+        _app.Settings.Save(_app.Settings.Load() with { DiagnosticLog = DiagCheck.IsChecked == true });
+
+    private static string LogDirectory => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OyunAltyazi", "logs");
+
     private void Refresh_Click(object sender, RoutedEventArgs e) { if (!Running) RefreshList(); }
     private void SelectRegion_Click(object sender, RoutedEventArgs e) => SelectRegion();
     private void Start_Click(object sender, RoutedEventArgs e) => ToggleRun();
@@ -208,6 +215,11 @@ public partial class MainWindow : Window
         _overlay.RegionProvider = () => _profile!.Region;
         _pipeline = new SubtitlePipeline(source, _app.Ocr, _app.Chain, sink, profile.ExeName, _app.Stats, () => Environment.TickCount64,
                                          regionProvider: () => _profile!.Region);
+        if (_app.Settings.Load().DiagnosticLog)
+        {
+            try { _diagLog = new DiagnosticLog(LogDirectory, profile.ExeName); _pipeline.Log = _diagLog.Write; }
+            catch (Exception) { _diagLog = null; }
+        }
         _pipeline.Start();
         StatusText.Text = "Çalışıyor…";
         UpdateButtons();
@@ -218,6 +230,7 @@ public partial class MainWindow : Window
         var p = _pipeline;
         _pipeline = null;
         p?.Dispose();
+        _diagLog?.Dispose(); _diagLog = null;
         _source?.Dispose();
         _source = null;
         _overlay.Detach();

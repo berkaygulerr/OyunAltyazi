@@ -13,3 +13,5 @@
 
 `powershell -ExecutionPolicy Bypass -File tools\ct2server\setup.ps1` — Python 3.12 venv'i ve modeli `%LOCALAPPDATA%\OyunAltyazi` altına kurar.
 Kurulu değilse uygulama Google çevirisine döner.
+
+Parts adapted from GameTranslator (sefflex) / CouchSubs (Sinan Yorulmaz), AGPL-3.0

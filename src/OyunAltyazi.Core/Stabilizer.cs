@@ -4,9 +4,12 @@ public abstract record StabilizerEvent;
 public sealed record ShowLine(SubtitleText Line) : StabilizerEvent;
 public sealed record ClearLine : StabilizerEvent;
 
-public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 4)
+public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 6)
 {
     private string? _shownCanon;
+    private bool _shownGarbled;
+    private void ResetPending() { _pendingCanon = null; _pendingText = null; _pendingCount = 0; }
+    private static int WordCount(string c) => c.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     private string? _pendingCanon;
     private SubtitleText? _pendingText;
     private int _pendingCount;
@@ -30,13 +33,19 @@ public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 
         var c = TextKey.Canon(read.Text);
         if (c.Length == 0) return null;
 
-        if (_shownCanon is not null && Similarity(c, _shownCanon) >= 0.85)
+        bool garbled = Garbled(read.Text);
+        if (_shownCanon is not null)
         {
-            _pendingCanon = null; _pendingText = null; _pendingCount = 0;
-            return null;
+            if (ScrolledOut(c, _shownCanon)) { ResetPending(); return null; }
+            if (SameLine(c, _shownCanon))
+            {
+                // Same line again. Only an upgrade (clean re-read of a line first shown garbled/partial) may replace it.
+                bool upgrade = !garbled && (_shownGarbled || WordCount(c) >= WordCount(_shownCanon) + 2);
+                if (!upgrade) { ResetPending(); return null; }
+            }
         }
 
-        if (_pendingCanon is not null && c == _pendingCanon)
+        if (_pendingCanon is not null && SameLine(c, _pendingCanon))
             _pendingCount++;
         else
         {
@@ -45,13 +54,67 @@ public sealed class Stabilizer(int confirmReads = 2, int clearAfterEmptyReads = 
         }
         _pendingText = read;
 
-        if (_pendingCount >= confirmReads)
+        // A complete, clean sentence (ends with . ! ? or an ellipsis) is not a typewriter fragment: show it on the first read.
+        // Garbled (fade / compression-damaged) reads need more agreement before they are shown.
+        if (_pendingCount >= (garbled ? confirmReads + 2 : confirmReads) || (_pendingCount == 1 && IsCompleteSentence(read.Text)))
         {
-            _shownCanon = c; _pendingCanon = null; _pendingCount = 0;
+            _shownCanon = c; _shownGarbled = garbled; ResetPending();
             return new ShowLine(read);
         }
         return null;
     }
+
+    /// <summary>The new read is just the shown text minus a line that faded/scrolled away (2-line subtitle losing a line).</summary>
+    /// <summary>Same on-screen line: near-identical, or a noisy re-read sharing most of its meaningful words (fuzzy, edit distance 1).</summary>
+    public static bool SameLine(string a, string b)
+    {
+        if (Similarity(a, b) >= 0.85) return true;
+        var ta = a.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 4).ToArray();
+        var tb = b.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 4).ToArray();
+        if (ta.Length == 0 || tb.Length == 0) return false;
+        var (small, big) = ta.Length <= tb.Length ? (ta, tb) : (tb, ta);
+        int matched = small.Count(w => big.Any(v => v == w || (Math.Abs(v.Length - w.Length) <= 1 && Levenshtein(v, w) <= 1)));
+        return matched >= 2 && matched >= small.Length * 0.6;
+    }
+
+    /// <summary>Stray symbols / non-ASCII letters / mid-word capitals: typical of a fade or compression-damaged read.</summary>
+    public static bool Garbled(string text)
+    {
+        foreach (var w in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            for (int i = 0; i < w.Length; i++)
+            {
+                char ch = w[i];
+                bool ok = (ch < 128 && (char.IsLetterOrDigit(ch) || ".,!?:;'\"()-/%&".Contains(ch))) || ch is '\u2019' or '\u2026' or '\u201C' or '\u201D' or '\u2013' or '\u2014';
+                if (!ok) return true;
+                if (i > 0 && i < w.Length - 1 && char.IsUpper(ch) && char.IsLower(w[i - 1]) && char.IsLetter(w[i + 1])) return true;
+                if (i > 0 && i < w.Length - 1 && char.IsLetter(w[i - 1]) && ch is ',' or ';' or ':') return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool ScrolledOut(string c, string shown)
+    {
+        var a = c.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (a.Length < 3) return false;
+        var b = new HashSet<string>(shown.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return a.Count(b.Contains) >= a.Length * 0.9 && c.Length < shown.Length;
+    }
+
+    public static bool IsCompleteSentence(string text)
+    {
+        var t = text.TrimEnd('"', '\'', '”', '’', ')', ']', ' ');
+        if (t.Length < 12 || !(t.EndsWith('.') || t.EndsWith('!') || t.EndsWith('?') || t.EndsWith('…'))) return false;
+        if (Garbled(t)) return false;
+        var words = t.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length < 3) return false;
+        // garbled reads contain stray 1-2 letter fragments ("omman er, a aa"): require mostly real words
+        int junk = words.Count(w => w.Count(char.IsLetter) is >= 1 and <= 2 && !ShortWords.Contains(new string(w.Where(char.IsLetter).ToArray()).ToLowerInvariant()));
+        return junk == 0;
+    }
+
+    private static readonly HashSet<string> ShortWords = new() { "a", "i", "an", "am", "as", "at", "be", "by", "do", "go", "he", "hi", "if", "in", "is", "it", "me", "my", "no", "of", "oh", "ok", "on", "or", "so", "to", "up", "us", "we" };
 
     private static double Similarity(string a, string b)
     {
