@@ -11,9 +11,12 @@ public static class TextCleaner
     public static SubtitleText? Clean(OcrResult ocr) => Clean(ocr, out _);
 
     /// <summary>Like Clean, also returning the union box (region-relative 0..1) of the OCR lines that made it into the text.</summary>
-    public static SubtitleText? Clean(OcrResult ocr, out RegionF? box)
+    public static SubtitleText? Clean(OcrResult ocr, out RegionF? box) => Clean(ocr, out box, out _);
+
+    /// <param name="lineCount">Number of OCR lines that formed the text (1 when nothing was kept).</param>
+    public static SubtitleText? Clean(OcrResult ocr, out RegionF? box, out int lineCount)
     {
-        box = null;
+        box = null; lineCount = 1;
         var keptLines = new List<OcrLine>();
         var kept = new List<string>();
         foreach (var line in ocr.Lines.OrderBy(l => l.Top))
@@ -35,6 +38,7 @@ public static class TextCleaner
         int words = joined.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         if (words < 2 && totalLetters < 4) return null;
 
+        lineCount = keptLines.Count;
         double l = keptLines.Min(k => k.Left), t0 = keptLines.Min(k => k.Top);
         double r = keptLines.Max(k => k.Left + k.Width), b = keptLines.Max(k => k.Top + k.Height);
         box = new RegionF(l, t0, r - l, b - t0);

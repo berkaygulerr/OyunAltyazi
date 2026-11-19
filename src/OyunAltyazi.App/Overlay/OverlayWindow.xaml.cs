@@ -46,8 +46,12 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         if (h != IntPtr.Zero) SetWindowDisplayAffinity(h, _excludeFromCapture ? WDA_EXCLUDEFROMCAPTURE : 0); // best effort (Win10 2004+)
     }
     // The captured game window (what the OCR boxes are relative to), in DIPs relative to the overlay's top-left.
-    private Rect _capDip = Rect.Empty;
-    private (string? Speaker, string Text, TranslationSource Source, RegionF? Box)? _current;
+    private bool _haveFrame;
+    private int _frameX, _frameY, _frameW, _frameH, _ovX, _ovY; // physical px: captured frame rect and overlay origin
+    private (string? Speaker, string Text, TranslationSource Source, RegionF? Box, int Lines)? _current;
+
+    /// <summary>Region the OCR reads (window fractions); its width caps how wide the Turkish box may grow.</summary>
+    public Func<RegionF>? RegionProvider { get; set; }
 
 
     public OverlayWindow()
@@ -107,11 +111,12 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         if (!IsVisible) Show();
         SetWindowPos(self, HWND_TOPMOST, pt.X, pt.Y, w, h, SWP_NOACTIVATE);
         var dpi = VisualTreeHelper.GetDpi(this);
-        // OCR boxes are fractions of the whole captured window (DWM frame); the overlay sits on the client area.
-        _capDip = new Rect(0, 0, w / dpi.DpiScaleX, h / dpi.DpiScaleY);
+        // OCR boxes are fractions of the whole captured window (DWM extended frame bounds); the overlay sits on the client area.
+        // Both rects are kept in physical px and mapped with OverlayMapping (DPI-correct).
+        (_frameX, _frameY, _frameW, _frameH, _ovX, _ovY) = (pt.X, pt.Y, w, h, pt.X, pt.Y);
         if (DwmGetWindowAttribute(_game, 9, out var fr, Marshal.SizeOf<RECT>()) == 0 && fr.Right > fr.Left && fr.Bottom > fr.Top)
-            _capDip = new Rect((fr.Left - pt.X) / dpi.DpiScaleX, (fr.Top - pt.Y) / dpi.DpiScaleY,
-                               (fr.Right - fr.Left) / dpi.DpiScaleX, (fr.Bottom - fr.Top) / dpi.DpiScaleY);
+            (_frameX, _frameY, _frameW, _frameH) = (fr.Left, fr.Top, fr.Right - fr.Left, fr.Bottom - fr.Top);
+        _haveFrame = true;
         Box.MaxWidth = w / dpi.DpiScaleX * 0.8;
         Box.Margin = new Thickness(0, 0, 0, h / dpi.DpiScaleY * _style.BottomMargin);
     }
@@ -122,9 +127,9 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         return fg == _game || fg == new WindowInteropHelper(this).Handle;
     }
 
-    public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null)
+    public void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1)
     {
-        Dispatcher.InvokeAsync(() => { _current = (speaker, text, source, box); Render(); });
+        Dispatcher.InvokeAsync(() => { _current = (speaker, text, source, box, lineCount); Render(); });
     }
 
     private static void Fill(TextBlock tb, string? speaker, string text, TranslationSource source)
@@ -145,10 +150,21 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         Render();
     }
 
+    private TextMetrics MeasureText(string? speaker, string text, double fs, double maxWidth)
+    {
+        double ppd = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var face = new Typeface(CoverText.FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        FormattedText Make(string t) => new(t, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, face, fs, Brushes.White, ppd);
+        var full = Make((string.IsNullOrEmpty(speaker) ? "" : speaker + ": ") + text);
+        full.MaxTextWidth = Math.Max(1, maxWidth);
+        double one = Make("Ag").Height;
+        return new TextMetrics(full.Width + 2, full.Height, Math.Max(1, (int)Math.Round(full.Height / one)));
+    }
+
     private void Render()
     {
         if (_current is not { } c) return;
-        bool cover = _style.CoverOriginal && c.Box is { W: > 0, H: > 0 } && !_capDip.IsEmpty && _capDip.Width > 0;
+        bool cover = _style.CoverOriginal && c.Box is { W: > 0, H: > 0 } && _haveFrame;
         if (!cover)
         {
             CoverBox.Visibility = Visibility.Collapsed;
@@ -157,31 +173,19 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
             return;
         }
         Box.Visibility = Visibility.Collapsed;
-        var b = c.Box!;
-        double ox = _capDip.X + b.X * _capDip.Width, oy = _capDip.Y + b.Y * _capDip.Height;
-        double ow = b.W * _capDip.Width, oh = b.H * _capDip.Height;
-        const double pad = 6;
-        double maxW = Math.Max(ow + 2 * pad, ActualWidth * 0.9);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var eng = OverlayMapping.FrameBoxToOverlayDips(c.Box!, _frameW, _frameH, _frameX, _frameY, _ovX, _ovY, dpi.DpiScaleX, dpi.DpiScaleY);
+        double maxW = ActualWidth * 0.95;
+        if (RegionProvider?.Invoke() is { W: > 0 } rg) maxW = Math.Min(maxW, rg.W * _frameW / dpi.DpiScaleX);
+        var fit = CoverLayout.Fit(eng, c.Lines, c.Text, c.Speaker, maxW, MeasureText);
         Fill(CoverText, c.Speaker, c.Text, c.Source);
-        CoverBox.Visibility = Visibility.Visible; // collapsed elements measure to 0
-        CoverBox.MaxWidth = maxW;
-        CoverBox.MinWidth = ow + 2 * pad;
-        // auto-fit: biggest font (min 14) whose wrapped height stays within the original block's height
-        double fs = Math.Clamp(oh * 0.85, 14, 60);
-        for (; ; fs -= 1)
-        {
-            CoverText.FontSize = fs;
-            CoverBox.Measure(new Size(maxW, double.PositiveInfinity));
-            if (fs <= 14 || CoverBox.DesiredSize.Height <= oh + 2 * pad + 4) break;
-        }
-        var sz = CoverBox.DesiredSize;
-        double h = Math.Max(sz.Height, oh + 2 * pad);
-        CoverBox.MinHeight = h;
-        double left = Math.Clamp(ox + ow / 2 - sz.Width / 2, 0, Math.Max(0, ActualWidth - sz.Width));
-        double top = Math.Clamp(oy + oh / 2 - h / 2, 0, Math.Max(0, ActualHeight - h));
-        Canvas.SetLeft(CoverBox, left); Canvas.SetTop(CoverBox, top);
-        CoverBox.VerticalAlignment = VerticalAlignment.Top; CoverBox.HorizontalAlignment = HorizontalAlignment.Left;
+        CoverText.FontSize = fit.FontSize;
+        var b = fit.Box;
+        CoverBox.Padding = new Thickness(CoverLayout.PadH, CoverLayout.PadV, CoverLayout.PadH, CoverLayout.PadV);
+        CoverBox.Width = b.Width; CoverBox.Height = b.Height;
         CoverText.VerticalAlignment = VerticalAlignment.Center;
+        CoverBox.CornerRadius = new CornerRadius(4);
+        Canvas.SetLeft(CoverBox, b.X); Canvas.SetTop(CoverBox, b.Y);
         CoverBox.Visibility = Visibility.Visible;
     }
 

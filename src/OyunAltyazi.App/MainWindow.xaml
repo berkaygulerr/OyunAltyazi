@@ -1,7 +1,7 @@
 <Window x:Class="OyunAltyazi.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="OyunAltyazı" Width="720" Height="300" MinWidth="640" Background="#1E1E1E"
+        Title="OyunAltyazı" Width="720" Height="330" MinWidth="640" Background="#1E1E1E"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#E6E6E6"/></Style>
@@ -9,7 +9,6 @@
     </Window.Resources>
     <StackPanel Margin="16">
         <DockPanel Margin="0,0,0,12">
-            <Button x:Name="AutoDetectBtn" DockPanel.Dock="Right" Content="Otomatik bul" Margin="8,0,0,0" Click="AutoDetect_Click"/>
             <Button x:Name="SelectRegionBtn" DockPanel.Dock="Right" Content="Bölge seç" Margin="8,0,0,0" Click="SelectRegion_Click"/>
             <Button x:Name="RefreshBtn" DockPanel.Dock="Right" Content="⟳" ToolTip="Pencere listesini yenile" Margin="8,0,0,0" Click="Refresh_Click"/>
             <TextBlock Text="Oyun:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -23,6 +22,7 @@
             <Button x:Name="StartBtn" Content="▶ Başlat" HorizontalAlignment="Left" Click="Start_Click"/>
         </DockPanel>
         <CheckBox x:Name="CoverCheck" Content="Üstüne yaz (İngilizceyi ört)" Foreground="#E6E6E6" IsChecked="True" Margin="0,0,0,8" Click="CoverCheck_Click"/>
+        <CheckBox x:Name="ScreenshotCheck" Content="Ekran görüntüsünde göster (hata ayıklama)" Foreground="#E6E6E6" Margin="0,0,0,8" Click="ScreenshotCheck_Click"/>
         <TextBlock x:Name="WarningText" Foreground="#F6AD55" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
         <TextBlock x:Name="StatusText" Foreground="#A0AEC0" Margin="0,0,0,8"/>
         <TextBlock x:Name="LastLineText" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,12" Text="Son satır: —"/>

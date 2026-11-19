@@ -37,6 +37,6 @@ public interface IOcrEngine
 public interface ISubtitleSink
 {
     /// <param name="box">Window-relative (0..1) bounding box of the original English subtitle, when known.</param>
-    void Show(string? speaker, string text, TranslationSource source, RegionF? box = null);
+    void Show(string? speaker, string text, TranslationSource source, RegionF? box = null, int lineCount = 1);
     void Clear();
 }

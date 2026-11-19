@@ -31,7 +31,7 @@ public class SubtitlePipelineTests
         public List<string> Shown = new();
         public int Clears;
         public RegionF? LastBox;
-        public void Show(string? s, string t, TranslationSource src, RegionF? box = null) { LastBox = box; lock (Shown) Shown.Add(t); }
+        public void Show(string? s, string t, TranslationSource src, RegionF? box = null, int lineCount = 1) { LastBox = box; lock (Shown) Shown.Add(t); }
         public void Clear() => Interlocked.Increment(ref Clears);
         public string[] Snapshot() { lock (Shown) return Shown.ToArray(); }
     }
