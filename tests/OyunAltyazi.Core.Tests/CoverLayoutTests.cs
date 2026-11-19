@@ -14,72 +14,72 @@ public class CoverLayoutTests
         return new TextMetrics(w, lines * fs * 1.25, lines);
     }
 
-    private static readonly DipRect Eng = new(300, 400, 400, 30); // one line, 30 DIP high -> start font 26 (25.5 rounded)
+    private static readonly DipRect Eng = new(300, 400, 400, 30);
 
     private static void AssertCovers(DipRect outer, DipRect inner)
     {
         Assert.True(outer.X <= inner.X + 1e-9 && outer.Y <= inner.Y + 1e-9 && outer.Right >= inner.Right - 1e-9 && outer.Bottom >= inner.Bottom - 1e-9);
-        Assert.Equal(inner.CenterX, outer.CenterX, 6);
-        Assert.Equal(inner.CenterY, outer.CenterY, 6);
     }
 
     [Fact]
-    public void Short_text_keeps_start_size_and_english_width()
+    public void Short_text_keeps_configured_font_regardless_of_english_height()
     {
-        var f = CoverLayout.Fit(Eng, 1, "Hemen gidin", null, 1000, Measure);
-        Assert.Equal(26, f.FontSize);
+        var f = CoverLayout.Fit(Eng, "Hemen gidin", null, 1000, 32, Measure);
+        Assert.Equal(32, f.FontSize);
+        Assert.Equal(Eng.Width + 24, f.Box.Width);
+        Assert.Equal(Eng.CenterX, f.Box.CenterX, 6);
+        AssertCovers(f.Box, Eng);
+        var tiny = CoverLayout.Fit(new DipRect(300, 400, 400, 10), "Hemen gidin", null, 1000, 40, Measure);
+        Assert.Equal(40, tiny.FontSize);
+    }
+
+    [Fact]
+    public void Long_text_keeps_font_and_widens_up_to_region()
+    {
+        var f = CoverLayout.Fit(Eng, new string('a', 50), null, 1000, 32, Measure); // 800 DIP at 32
+        Assert.Equal(32, f.FontSize);
         Assert.Equal(1, f.Lines);
-        Assert.Equal(Eng.Width + 12, f.Box.Width);
+        Assert.True(f.Box.Width > Eng.Width + 24 && f.Box.Width <= 1000);
         AssertCovers(f.Box, Eng);
     }
 
     [Fact]
-    public void Long_text_widens_symmetrically_before_wrapping()
+    public void Taller_box_grows_upward_with_bottom_aligned_to_english()
     {
-        var text = new string('a', 50); // 50*13 = 650 DIP at 26
-        var f = CoverLayout.Fit(Eng, 1, text, null, 1000, Measure);
-        Assert.Equal(26, f.FontSize);
-        Assert.Equal(1, f.Lines);
-        Assert.True(f.Box.Width > Eng.Width + 12 && f.Box.Width <= 1000);
+        var f = CoverLayout.Fit(Eng, new string('a', 120), null, 700, 32, Measure);
+        Assert.Equal(3, f.Lines);
+        Assert.Equal(32, f.FontSize);
+        Assert.True(f.Box.Height > Eng.Height + 12);
+        Assert.Equal(Eng.Bottom + CoverLayout.PadV, f.Box.Bottom, 6);
+        Assert.True(f.Box.Y < Eng.Y);
         AssertCovers(f.Box, Eng);
     }
 
     [Fact]
-    public void Wraps_to_at_most_lineCount_plus_one_then_shrinks()
+    public void Floor_24_only_when_more_than_three_lines()
     {
-        var text = new string('a', 120);
-        var f = CoverLayout.Fit(Eng, 1, text, null, 700, Measure);
-        Assert.True(f.Lines <= 2);
-        Assert.True(f.FontSize < 26);          // 3 lines at 26 -> shrink needed
-        Assert.True(f.Box.Width <= 700);
-        AssertCovers(f.Box, Eng);
-    }
-
-    [Fact]
-    public void Two_line_english_allows_three_lines_at_start_size()
-    {
-        var eng = new DipRect(100, 100, 600, 80); // 2 lines -> start 0.85*40 = 34
-        var f = CoverLayout.Fit(eng, 2, new string('a', 100), null, 700, Measure);
-        Assert.Equal(34, f.FontSize);
-        Assert.True(f.Lines <= 3);
-    }
-
-    [Fact]
-    public void Never_below_min_font_and_still_covers()
-    {
-        var f = CoverLayout.Fit(Eng, 1, new string('a', 5000), "Bob", 500, Measure);
+        var ok = CoverLayout.Fit(Eng, new string('a', 100), null, 700, 32, Measure); // 3 lines at 32
+        Assert.Equal(32, ok.FontSize);
+        var f = CoverLayout.Fit(Eng, new string('a', 5000), "Bob", 500, 32, Measure);
         Assert.Equal(CoverLayout.MinFont, f.FontSize);
         Assert.True(f.Box.Width <= 500);
         AssertCovers(f.Box, Eng);
-        var tiny = CoverLayout.Fit(new DipRect(0, 0, 50, 10), 1, "x", null, 400, Measure);
-        Assert.Equal(CoverLayout.MinFont, tiny.FontSize);
-        AssertCovers(tiny.Box, new DipRect(0, 0, 50, 10));
+        var g = CoverLayout.Fit(Eng, new string('a', 60), null, 700, 32, Measure); // 2 lines -> no shrink
+        Assert.Equal(32, g.FontSize);
+    }
+
+    [Fact]
+    public void Clamped_to_bounds_but_still_covers_english()
+    {
+        var bounds = new DipRect(0, 380, 1000, 100);
+        var f = CoverLayout.Fit(Eng, new string('a', 120), null, 700, 32, Measure, bounds);
+        AssertCovers(f.Box, Eng);
     }
 
     [Fact]
     public void Box_never_narrower_than_english_even_if_max_width_is_small()
     {
-        var f = CoverLayout.Fit(Eng, 1, "ab", null, 100, Measure);
+        var f = CoverLayout.Fit(Eng, "ab", null, 100, 32, Measure);
         Assert.True(f.Box.Width >= Eng.Width);
         Assert.True(f.Box.Height >= Eng.Height);
     }

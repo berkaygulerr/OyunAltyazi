@@ -157,7 +157,8 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         FormattedText Make(string t) => new(t, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, face, fs, Brushes.White, ppd);
         var full = Make((string.IsNullOrEmpty(speaker) ? "" : speaker + ": ") + text);
         full.MaxTextWidth = Math.Max(1, maxWidth);
-        double one = Make("Ag").Height;
+        full.LineHeight = fs * CoverLayout.LineHeightFactor;
+        var oneT = Make("Ag"); oneT.LineHeight = fs * CoverLayout.LineHeightFactor; double one = oneT.Height;
         return new TextMetrics(full.Width + 2, full.Height, Math.Max(1, (int)Math.Round(full.Height / one)));
     }
 
@@ -177,14 +178,15 @@ public sealed partial class OverlayWindow : Window, ISubtitleSink
         var eng = OverlayMapping.FrameBoxToOverlayDips(c.Box!, _frameW, _frameH, _frameX, _frameY, _ovX, _ovY, dpi.DpiScaleX, dpi.DpiScaleY);
         double maxW = ActualWidth * 0.95;
         if (RegionProvider?.Invoke() is { W: > 0 } rg) maxW = Math.Min(maxW, rg.W * _frameW / dpi.DpiScaleX);
-        var fit = CoverLayout.Fit(eng, c.Lines, c.Text, c.Speaker, maxW, MeasureText);
+        var fit = CoverLayout.Fit(eng, c.Text, c.Speaker, maxW, _style.FontSize, MeasureText, new DipRect(0, 0, ActualWidth, ActualHeight));
         Fill(CoverText, c.Speaker, c.Text, c.Source);
         CoverText.FontSize = fit.FontSize;
+        CoverText.LineHeight = fit.FontSize * CoverLayout.LineHeightFactor;
         var b = fit.Box;
         CoverBox.Padding = new Thickness(CoverLayout.PadH, CoverLayout.PadV, CoverLayout.PadH, CoverLayout.PadV);
         CoverBox.Width = b.Width; CoverBox.Height = b.Height;
         CoverText.VerticalAlignment = VerticalAlignment.Center;
-        CoverBox.CornerRadius = new CornerRadius(4);
+        CoverBox.CornerRadius = new CornerRadius(8);
         Canvas.SetLeft(CoverBox, b.X); Canvas.SetTop(CoverBox, b.Y);
         CoverBox.Visibility = Visibility.Visible;
     }

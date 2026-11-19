@@ -18,30 +18,40 @@ public readonly record struct CoverFit(DipRect Box, double FontSize, int Lines);
 
 public static class CoverLayout
 {
-    public const double MinFont = 14, PadH = 6, PadV = 3;
+    public const double MinFont = 24, DefaultFont = 32, PadH = 12, PadV = 6, MaxLines = 3, LineHeightFactor = 1.15;
 
     /// <summary>
-    /// Places the Turkish text over the English box. Start font = line height*0.85; width may grow symmetrically up to
-    /// <paramref name="maxWidth"/>; at most lineCount+1 lines; otherwise font shrinks (1 DIP steps, min 14).
-    /// The returned box always contains the English box (plus padding), centred on it.
+    /// Places the Turkish text over the English box with OUR font size (fontSize, not derived from the English).
+    /// The font only shrinks (1 DIP steps, floor 24) when the text needs more than 3 lines within maxWidth.
+    /// Box = max(English+pad, text+pad), centred horizontally on the English box, bottom aligned to the English bottom (+pad)
+    /// so a taller box grows upward; clamped inside bounds when given (never at the cost of covering the English box).
     /// </summary>
-    public static CoverFit Fit(DipRect english, int lineCount, string text, string? speaker, double maxWidth, TextMeasure measure)
+    public static CoverFit Fit(DipRect english, string text, string? speaker, double maxWidth, double fontSize, TextMeasure measure, DipRect? bounds = null)
     {
-        lineCount = Math.Max(1, lineCount);
         double minW = english.Width + 2 * PadH;
         double boxMaxW = Math.Max(maxWidth, minW);
         double textMaxW = boxMaxW - 2 * PadH;
-        double fs = Math.Max(MinFont, Math.Round(english.Height / lineCount * 0.85));
+        double fs = fontSize;
+        double floor = Math.Min(MinFont, fs);
         TextMetrics m;
         while (true)
         {
             m = measure(speaker, text, fs, textMaxW);
-            if (m.Lines <= lineCount + 1 || fs <= MinFont) break;
+            if (m.Lines <= MaxLines || fs <= floor) break;
             fs -= 1;
         }
         double w = Math.Min(boxMaxW, Math.Max(minW, Math.Ceiling(m.Width) + 2 * PadH));
         double h = Math.Max(english.Height + 2 * PadV, Math.Ceiling(m.Height) + 2 * PadV);
-        return new CoverFit(new DipRect(english.CenterX - w / 2, english.CenterY - h / 2, w, h), fs, m.Lines);
+        double x = english.CenterX - w / 2;
+        double y = english.Bottom + PadV - h;
+        if (bounds is { } r)
+        {
+            x = Math.Max(r.X, Math.Min(x, r.Right - w));
+            y = Math.Max(r.Y, Math.Min(y, r.Bottom - h));
+            x = Math.Min(x, english.X); x = Math.Max(x, english.Right - w);
+            y = Math.Min(y, english.Y); y = Math.Max(y, english.Bottom - h);
+        }
+        return new CoverFit(new DipRect(x, y, w, h), fs, m.Lines);
     }
 }
 

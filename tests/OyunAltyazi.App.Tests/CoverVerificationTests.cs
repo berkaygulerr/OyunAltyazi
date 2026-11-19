@@ -155,6 +155,7 @@ $s.AutoSize=$false; $s.TextAlign='MiddleCenter'; $s.Left=0; $s.Width=1600; $s.He
         pipe.Start();
         Assert.True(await WaitUntil(() => sink.Shown, 20000), "çeviri gösterilmedi");
         // The overlay only shows while the game is foreground: re-assert focus and poll until the cover is visible on screen.
+        var coverStrip = Rectangle.FromLTRB(0, Math.Max(0, strip.Top - 260), frame.Width, strip.Bottom);
         Bitmap after = null!; Rectangle? coverFound = null;
         for (int i = 0; i < 25 && coverFound is null; i++)
         {
@@ -163,32 +164,37 @@ $s.AutoSize=$false; $s.TextAlign='MiddleCenter'; $s.Left=0; $s.Width=1600; $s.He
             await Task.Delay(400);
             after?.Dispose();
             after = Shot(frame);
-            coverFound = Bounds(after, strip, c => Math.Abs(c.R - 18) < 4 && Math.Abs(c.G - 18) < 4 && Math.Abs(c.B - 18) < 4);
+            coverFound = Bounds(after, coverStrip, c => Math.Abs(c.R - 18) < 4 && Math.Abs(c.G - 18) < 4 && Math.Abs(c.B - 18) < 4);
+        }
+        var dir = Environment.GetEnvironmentVariable("OA_SHOT_DIR");
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+            using var crop = after.Clone(new Rectangle(0, coverStrip.Top - 20, frame.Width, Math.Min(coverStrip.Height + 120, frame.Height - coverStrip.Top + 20)), PixelFormat.Format32bppArgb);
+            crop.Save(Path.Combine(dir, shotName + ".png"), ImageFormat.Png);
         }
         var cover = coverFound ?? throw new Exception("Örtü kutusu bulunamadı");
         Console.WriteLine($"{shotName}: cover box {cover}, pipeline lines={sink.Lines}");
         const int tol = 2;
         Assert.True(cover.Left <= truth.Left + tol && cover.Top <= truth.Top + tol && cover.Right >= truth.Right - tol && cover.Bottom >= truth.Bottom - tol,
                     $"örtü İngilizce kutuyu kapsamıyor: cover={cover} truth={truth}");
-        Assert.True(cover.Height < truth.Height * 3 + 20, "örtü gereksiz büyük");
+        Assert.True(cover.Height < 400, "örtü gereksiz büyük");
 
         var inner = Rectangle.Inflate(cover, -3, -2);
-        var res = await Ocr(ocr, after, inner);
+        // 64px glyphs are too big for the Windows OCR to read reliably: downscale 2x (the user reads it at full size)
+        using var innerBmp = after.Clone(inner, PixelFormat.Format32bppArgb);
+        using var half = new Bitmap(innerBmp, new Size(innerBmp.Width * 2 / 5, innerBmp.Height * 2 / 5));
+        var res = await Ocr(ocr, half, new Rectangle(0, 0, half.Width, half.Height));
         var read = string.Join(" ", res.Lines.Select(l => l.Text)).ToLowerInvariant();
         Console.WriteLine($"{shotName}: OCR inside cover: {read}");
         Assert.Contains("helikoptere", read);
         Assert.DoesNotContain(EnglishWords, w => read.Contains(w));
-        double trLineH = res.Lines.Max(l => l.Height) * inner.Height;
+        double trLineH = res.Lines.Max(l => l.Height) * half.Height * 2.5;
         Console.WriteLine($"{shotName}: Turkish OCR line height {trLineH:0.0}px vs English {engLineH:0.0}px ({trLineH / engLineH:0.00})");
-        Assert.InRange(trLineH / engLineH, 0.7, 1.3);
+        double cfgPx = new OverlayStyle().FontSize * 2 * CoverLayout.LineHeightFactor; // 200% DPI
+        Console.WriteLine($"{shotName}: expected line ~{cfgPx:0.0}px");
+        Assert.InRange(trLineH / cfgPx, 0.75, 1.25);
 
-        var dir = Environment.GetEnvironmentVariable("OA_SHOT_DIR");
-        if (!string.IsNullOrEmpty(dir))
-        {
-            Directory.CreateDirectory(dir);
-            using var crop = after.Clone(new Rectangle(0, strip.Top - 60, frame.Width, Math.Min(strip.Height + 120, frame.Height - strip.Top + 60)), PixelFormat.Format32bppArgb);
-            crop.Save(Path.Combine(dir, shotName + ".png"), ImageFormat.Png);
-        }
         overlay!.Dispatcher.InvokeShutdown();
     }
 }

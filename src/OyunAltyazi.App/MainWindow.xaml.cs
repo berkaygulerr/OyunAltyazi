@@ -118,6 +118,10 @@ public partial class MainWindow : Window
             if (s.LastExe != info.ExeName) _app.Settings.Save(s with { LastExe = info.ExeName });
         }
         CoverCheck.IsChecked = _profile?.Overlay.CoverOriginal ?? true;
+        _loadingFont = true;
+        FontSlider.Value = _profile?.Overlay.FontSize ?? CoverLayout.DefaultFont;
+        FontValue.Text = ((int)FontSlider.Value).ToString();
+        _loadingFont = false;
         UpdateButtons();
     }
 
@@ -134,6 +138,20 @@ public partial class MainWindow : Window
         if (_suppressSelection) return;
         StopRun();
         ApplySelection((WindowCombo.SelectedItem as Item)?.Info);
+    }
+
+    private bool _loadingFont;
+
+    private void FontSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (FontValue is null) return;
+        FontValue.Text = ((int)e.NewValue).ToString();
+        if (_loadingFont || _profile is null) return;
+        _profile = _profile with { Overlay = _profile.Overlay with { FontSize = e.NewValue } };
+        var s = _app.Settings.Load();
+        var profiles = new Dictionary<string, GameProfile>(s.Profiles ?? new(), StringComparer.OrdinalIgnoreCase) { [_profile.ExeName] = _profile };
+        _app.Settings.Save(s with { Profiles = profiles });
+        _overlay.SetStyle(_profile.Overlay);
     }
 
     private void CoverCheck_Click(object sender, RoutedEventArgs e)

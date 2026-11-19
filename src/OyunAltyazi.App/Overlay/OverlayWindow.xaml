@@ -11,8 +11,10 @@
                        TextWrapping="Wrap" TextAlignment="Center"/>
         </Border>
         <Canvas x:Name="CoverLayer">
-            <Border x:Name="CoverBox" Visibility="Collapsed" CornerRadius="8" Padding="10,4" Background="#EB121212">
-                <TextBlock x:Name="CoverText" Foreground="White" FontFamily="Segoe UI" TextWrapping="Wrap" TextAlignment="Center"/>
+            <Border x:Name="CoverBox" Visibility="Collapsed" CornerRadius="8" Padding="12,6" Background="#EB121212">
+                <TextBlock x:Name="CoverText" Foreground="White" FontFamily="Segoe UI" TextWrapping="Wrap" TextAlignment="Center" LineStackingStrategy="BlockLineHeight">
+                    <TextBlock.Effect><DropShadowEffect ShadowDepth="1" BlurRadius="3" Color="Black" Opacity="0.9"/></TextBlock.Effect>
+                </TextBlock>
             </Border>
         </Canvas>
     </Grid>
