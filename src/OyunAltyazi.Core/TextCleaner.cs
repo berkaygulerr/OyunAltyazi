@@ -5,9 +5,11 @@ namespace OyunAltyazi.Core;
 public static class TextCleaner
 {
     private static readonly Regex ButtonHint = new(@"^\s*[\[(][^\]\)]{1,6}[\])](\s+\w+)?\s*$", RegexOptions.Compiled);
-    private static readonly Regex Speaker = new(@"^([A-Z][A-Za-z0-9 .'\-]{0,24}?)\s?:\s*(?=\S)(.+)$", RegexOptions.Compiled);
+    private static readonly Regex Speaker = new(@"^([A-Z][A-Za-z0-9 .'\-]{0,24}?)\s?[:;]\s*(?=\S)(.+)$", RegexOptions.Compiled);
     // A name whose first letters were lost by OCR ('ria:' from 'Valeria:'): lowercase start, short, then a colon.
     private static readonly Regex GarbledSpeaker = new(@"^[a-z][A-Za-z'\-]{0,15}\s?[:;]\s*(?=\S)(.+)$", RegexOptions.Compiled);
+    // A lone "|" or "l" before a lowercase word is the pronoun I.
+    private static readonly Regex LoneI = new(@"(?<=^|\s)[|l](?=\s+[a-z])", RegexOptions.Compiled);
     private static readonly Regex Confusable = new(@"[A-Za-z01|]+", RegexOptions.Compiled);
 
     public static SubtitleText? Clean(OcrResult ocr) => Clean(ocr, out _);
@@ -35,7 +37,7 @@ public static class TextCleaner
         }
         if (kept.Count == 0) return null;
 
-        var joined = FixConfusions(string.Join(" ", kept));
+        var joined = RepairWords(LoneI.Replace(FixConfusions(StripMarks(string.Join(" ", kept))), "I"));
         int totalLetters = joined.Count(char.IsLetter);
         int words = joined.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         if (words < 2 && totalLetters < 4) return null;
@@ -55,7 +57,7 @@ public static class TextCleaner
         {
             var name = m.Groups[1].Value.Trim();
             var fixedName = Repair(name, known);
-            if (fixedName is null) return new SubtitleText(null, m.Groups[2].Value);
+            if (fixedName is null) return new SubtitleText(null, joined); // unsure about the name: keep the raw text, never lose words
             return new SubtitleText(fixedName, m.Groups[2].Value);
         }
         var g = GarbledSpeaker.Match(joined);
@@ -110,6 +112,20 @@ public static class TextCleaner
             row.Add(l);
         }
         foreach (var r in row.OrderBy(x => x.Left)) yield return r;
+    }
+
+    private static readonly Regex Glued = new(@"\b(of|to|in|on|at|for|and|is|not)(you|your|the|our|my|we|they|them|him|her)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex DoubleI = new(@"\bII(?=\s+[a-z])", RegexOptions.Compiled);
+
+    // English OCR sometimes adds accents (Årcher) or glues function words / doubles the pronoun I; fix those without dropping anything.
+    private static string RepairWords(string s) => Glued.Replace(DoubleI.Replace(s, "I"), "$1 $2");
+
+    private static string StripMarks(string s)
+    {
+        var d = s.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(d.Length);
+        foreach (var c in d) if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark) sb.Append(c);
+        return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
     }
 
     private static string FixConfusions(string s) => Confusable.Replace(s, m =>
