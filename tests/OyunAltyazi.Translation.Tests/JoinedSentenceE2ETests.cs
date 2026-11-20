@@ -25,4 +25,23 @@ public class JoinedSentenceE2ETests(ITestOutputHelper output)
         output.WriteLine($"FRAG1: {fa}\nFRAG2: {fb}\nJOINED: {full}");
         Assert.False(string.IsNullOrWhiteSpace(full));
     }
+
+    [Theory]
+    [InlineData("We have to get to the extraction point", "before the enemy reinforcements arrive.")]
+    [InlineData("If we don't stop them now,", "thousands of people are going to die.")]
+    public async Task Real_ct2_continuation_reads_as_one_sentence(string f1, string f2)
+    {
+        var script = Ct2Paths.FindServerScript();
+        if (script is null || !Ct2Paths.IsInstalled(script)) return;
+        using var t = new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.VenvPython, script, Ct2Paths.ModelDir), TimeSpan.FromSeconds(10));
+        var ctx = new TranslationContext("g", [], null);
+        await t.TranslateAsync("Warm.", ctx, default);
+        var tr1 = await t.TranslateAsync(f1, ctx, default);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var cont = await t.TranslateContinuationAsync(f1 + " " + f2, tr1, ctx, default);
+        sw.Stop();
+        output.WriteLine($"F1: {tr1}\nCONT: {cont}\nCONCAT: {tr1} {cont}\nLATENCY_MS: {sw.ElapsedMilliseconds}");
+        Assert.True(cont.Length >= 2);
+        Assert.DoesNotContain(Ct2Translator.TrimFinalPunctuation(tr1), cont);
+    }
 }

@@ -16,6 +16,12 @@ public interface ITranslator
     Task<string> TranslateAsync(string text, TranslationContext ctx, CancellationToken ct);
 }
 
+/// <summary>Optional capability: translate a sentence whose beginning was already shown (forced decoding), returning only the continuation.</summary>
+public interface IContinuationTranslator : ITranslator
+{
+    Task<string> TranslateContinuationAsync(string fullEnglish, string shownPrefixTurkish, TranslationContext ctx, CancellationToken ct);
+}
+
 public sealed class TranslatorException(string message, int? statusCode = null) : Exception(message)
 {
     public int? StatusCode { get; } = statusCode;

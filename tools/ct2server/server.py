@@ -35,10 +35,20 @@ def main():
         sp_s = spm.SentencePieceProcessor(os.path.join(a.model, "source.spm"))
         sp_t = spm.SentencePieceProcessor(os.path.join(a.model, "target.spm"))
 
-        def run(texts):
+        def run(texts, prefixes=None):
             toks = [sp_s.encode(t, out_type=str) + ["</s>"] for t in texts]
-            res = tr.translate_batch(toks, beam_size=a.beam, max_decoding_length=256)
-            return [sp_t.decode(r.hypotheses[0]) for r in res]
+            if not prefixes or not any(prefixes):
+                res = tr.translate_batch(toks, beam_size=a.beam, max_decoding_length=256)
+                return [sp_t.decode(r.hypotheses[0]) for r in res]
+            # forced decoding: output starts with the prefix tokens; return only the continuation
+            ptoks = [sp_t.encode(p, out_type=str) if p else [] for p in prefixes]
+            res = tr.translate_batch(toks, target_prefix=ptoks, beam_size=a.beam, max_decoding_length=256)
+            out = []
+            for r, pt in zip(res, ptoks):
+                h = r.hypotheses[0]
+                cont = sp_t.decode(h[len(pt):] if pt and h[:len(pt)] == pt else h) if pt else sp_t.decode(h)
+                out.append(cont.strip().lstrip(" ,;:.!?…-").strip() if pt else cont)
+            return out
         run(["Warm up."])
     except Exception as e:
         if dev == "cuda" and a.device == "auto":
@@ -56,7 +66,7 @@ def main():
         try:
             req = json.loads(line)
             t0 = time.perf_counter()
-            out = run(req["texts"])
+            out = run(req["texts"], req.get("prefix"))
             print(json.dumps({"id": req["id"], "translations": out,
                               "ms": round((time.perf_counter() - t0) * 1000, 1)}, ensure_ascii=False), flush=True)
         except Exception as e:

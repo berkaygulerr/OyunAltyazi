@@ -62,6 +62,7 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         public CancellationTokenSource? Cts;
         public long Seq;
         public ShownUtterance? Shown;
+        public List<string> Parts = new(); // shown Turkish of each fragment of the open sentence
     }
 
     private void CancelTranslation()
@@ -210,13 +211,20 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
         CancellationTokenSource cts;
         long mySeq;
         string[] prev;
+        int partIndex; string[] prefixParts; List<string> parts;
         lock (_lock)
         {
             slot.Cts?.Cancel();
             cts = slot.Cts = new CancellationTokenSource();
             mySeq = ++slot.Seq;
             prev = _recent.ToArray();
+            if (join.Joined is null) slot.Parts = new List<string>();
+            partIndex = slot.Parts.Count;
+            prefixParts = slot.Parts.ToArray();
+            slot.Parts.Add("");
+            parts = slot.Parts;
         }
+        var shownPrefix = prefixParts.Length > 0 && prefixParts.All(p => p.Length > 0) ? string.Join(" ", prefixParts) : null;
         var ctx = new TranslationContext(game, prev, line.Speaker);
         var joined = join.Joined;
         _ = Task.Run(async () =>
@@ -230,12 +238,13 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                     if (mySeq != slot.Seq || cts.IsCancellationRequested) return;
                     if (joined is null) { _recent.Add(line.Text); while (_recent.Count > 6) _recent.RemoveAt(0); }
                     slot.Shown = new ShownUtterance(line.Speaker, r.Text, r.Source);
+                    if (r.Source != TranslationSource.Fallback) parts[partIndex] = r.Text;
                     PublishLocked();
                     stats.Add(new LineTiming(capturedMs, ocrDoneMs, stableMs, clockMs(), r.Source));
                 }
-                if (joined is null) return;
-                // 2) the whole sentence replaces it
-                var jr = await chain.TranslateAsync(joined, new TranslationContext(game, prev, joined.Speaker), cts.Token).ConfigureAwait(false);
+                if (joined is null || shownPrefix is null) return;
+                // 2) only this fragment's part, translated with the earlier fragments as context (never repeats them)
+                var jr = await chain.TranslateContinuationAsync(line, joined, shownPrefix, new TranslationContext(game, prev, joined.Speaker), cts.Token).ConfigureAwait(false);
                 lock (_lock)
                 {
                     if (mySeq != slot.Seq || cts.IsCancellationRequested) return;
@@ -244,6 +253,7 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                     _recent.Add(joined.Text);
                     while (_recent.Count > 6) _recent.RemoveAt(0);
                     slot.Shown = new ShownUtterance(joined.Speaker, jr.Text, jr.Source);
+                    parts[partIndex] = jr.Text;
                     PublishLocked();
                 }
             }

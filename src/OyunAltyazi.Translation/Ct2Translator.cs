@@ -52,7 +52,7 @@ public static class Ct2Paths
     };
 }
 
-public sealed class Ct2Translator(SidecarLauncher launcher, TimeSpan? requestTimeout = null, TimeSpan? startTimeout = null) : ITranslator, IDisposable
+public sealed class Ct2Translator(SidecarLauncher launcher, TimeSpan? requestTimeout = null, TimeSpan? startTimeout = null) : IContinuationTranslator, IDisposable
 {
     private readonly TimeSpan _reqTimeout = requestTimeout ?? TimeSpan.FromSeconds(2);
     private readonly TimeSpan _startTimeout = startTimeout ?? TimeSpan.FromSeconds(90);
@@ -65,7 +65,16 @@ public sealed class Ct2Translator(SidecarLauncher launcher, TimeSpan? requestTim
     public string Name => "ct2";
     public string? Device { get; private set; }
 
-    public async Task<string> TranslateAsync(string text, TranslationContext ctx, CancellationToken ct)
+    public Task<string> TranslateAsync(string text, TranslationContext ctx, CancellationToken ct) => RunAsync(text, null, ct);
+
+    /// <summary>Önceki parçanın gösterilen Türkçesini hedef öneki olarak zorlar; yalnızca devamı döndürür (boş olabilir).</summary>
+    public Task<string> TranslateContinuationAsync(string fullEnglish, string shownPrefixTurkish, TranslationContext ctx, CancellationToken ct)
+        => RunAsync(fullEnglish, TrimFinalPunctuation(shownPrefixTurkish), ct);
+
+    /// <summary>Cümle sonu noktalamasını atar ki model cümleyi doğal sürdürsün.</summary>
+    public static string TrimFinalPunctuation(string s) => s.TrimEnd().TrimEnd('.', '!', '?', '…', ' ');
+
+    private async Task<string> RunAsync(string text, string? prefix, CancellationToken ct)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -74,14 +83,14 @@ public sealed class Ct2Translator(SidecarLauncher launcher, TimeSpan? requestTim
             // bir çökme sonrası bir kez yeniden başlat
             for (int attempt = 0; ; attempt++)
             {
-                try { return await RequestAsync(text, ct).ConfigureAwait(false); }
+                try { return await RequestAsync(text, prefix, ct).ConfigureAwait(false); }
                 catch (TranslatorException) when (attempt == 0 && _failures < 2 && !ct.IsCancellationRequested) { }
             }
         }
         finally { _gate.Release(); }
     }
 
-    private async Task<string> RequestAsync(string text, CancellationToken ct)
+    private async Task<string> RequestAsync(string text, string? prefix, CancellationToken ct)
     {
         if (_failures >= 3) throw new TranslatorException("Yerel çevirmen kullanılamıyor.");
         try
@@ -90,7 +99,7 @@ public sealed class Ct2Translator(SidecarLauncher launcher, TimeSpan? requestTim
             int id = ++_id;
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(_reqTimeout);
-            await _sc.Input.WriteLineAsync(JsonSerializer.Serialize(new { id, texts = new[] { text } })).ConfigureAwait(false);
+            await _sc.Input.WriteLineAsync((prefix is null ? JsonSerializer.Serialize(new { id, texts = new[] { text } }) : JsonSerializer.Serialize(new { id, texts = new[] { text }, prefix = new[] { prefix } }))).ConfigureAwait(false);
             await _sc.Input.FlushAsync(cts.Token).ConfigureAwait(false);
             while (true)
             {
@@ -101,9 +110,9 @@ public sealed class Ct2Translator(SidecarLauncher launcher, TimeSpan? requestTim
                 if (!root.TryGetProperty("id", out var rid) || rid.ValueKind != JsonValueKind.Number || rid.GetInt32() != id) continue; // eski yanıt
                 if (root.TryGetProperty("error", out var err)) throw new TranslatorException("Yerel çeviri hatası: " + err.GetString());
                 var res = root.GetProperty("translations")[0].GetString();
-                if (string.IsNullOrWhiteSpace(res)) throw new TranslatorException("Yerel çeviri boş döndü.");
+                if (string.IsNullOrWhiteSpace(res) && prefix is null) throw new TranslatorException("Yerel çeviri boş döndü.");
                 _failures = 0;
-                return res;
+                return res ?? "";
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)

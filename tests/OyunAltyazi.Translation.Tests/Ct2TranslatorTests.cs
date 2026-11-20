@@ -87,4 +87,38 @@ public class Ct2TranslatorTests
         using var t = new Ct2Translator(() => throw new TranslatorException("yok"));
         await Assert.ThrowsAsync<TranslatorException>(() => t.TranslateAsync("Hi", Ctx, default));
     }
+
+    [Fact]
+    public async Task Continuation_sends_trimmed_prefix_and_returns_continuation_only()
+    {
+        var reqs = new List<string>();
+        using var t = new Ct2Translator(() => Fake(l =>
+        {
+            reqs.Add(l);
+            using var d = System.Text.Json.JsonDocument.Parse(l);
+            var id = d.RootElement.GetProperty("id").GetInt32();
+            var cont = d.RootElement.TryGetProperty("prefix", out _) ? "düşman gelmeden önce." : "TAM";
+            return "{\"id\":" + id + ",\"translations\":[\"" + cont + "\"],\"ms\":1}";
+        }));
+        var c = await t.TranslateContinuationAsync("We go before the enemy arrives.", "Gitmeliyiz...", Ctx, default);
+        Assert.Equal("düşman gelmeden önce.", c);
+        using (var d = System.Text.Json.JsonDocument.Parse(reqs[0]))
+        {
+            Assert.Equal("We go before the enemy arrives.", d.RootElement.GetProperty("texts")[0].GetString());
+            Assert.Equal("Gitmeliyiz", d.RootElement.GetProperty("prefix")[0].GetString());
+        }
+        Assert.Equal("TAM", await t.TranslateAsync("x", Ctx, default));
+        Assert.DoesNotContain("prefix", reqs[1]);
+    }
+
+    [Fact]
+    public async Task Empty_continuation_is_returned_empty_not_an_error()
+    {
+        using var t = new Ct2Translator(() => Fake(l =>
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(l);
+            return "{\"id\":" + d.RootElement.GetProperty("id").GetInt32() + ",\"translations\":[\"\"],\"ms\":1}";
+        }));
+        Assert.Equal("", await t.TranslateContinuationAsync("A b.", "Merhaba", Ctx, default));
+    }
 }
