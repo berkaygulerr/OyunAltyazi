@@ -17,7 +17,7 @@ public sealed class UpdateService : IDisposable
     private string? _scheduledFor;
     private readonly string _logPath;
 
-    public string Status { get; private set; } = "Güncellemeler arka planda otomatik denetlenir.";
+    public string Status { get; private set; } = "Güncellemeler arka planda otomatik denetlenir ve indirilir.";
     public bool IsInstalled => _mgr?.IsInstalled == true;
     public string CurrentVersion => _mgr?.CurrentVersion?.ToString() ?? "geliştirme";
     public string? ReadyVersion => _ready?.Version?.ToString();
