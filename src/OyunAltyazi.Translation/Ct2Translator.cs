@@ -17,8 +17,9 @@ public delegate Sidecar SidecarLauncher();
 
 public static class Ct2Paths
 {
-    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OyunAltyazi");
-    public static string VenvPython => Path.Combine(Root, "ct2", "venv", "Scripts", "python.exe");
+    // Velopack kurulum klasörü %LOCALAPPDATA%\OyunAltyazi: kurucu orayı temizler. Bu yüzden veriler ayrı klasörde.
+    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OyunAltyaziData");
+    public static string VenvPython => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OyunAltyazi", "ct2", "venv", "Scripts", "python.exe"); // eski geliştirici venv'i
     public static string RuntimeDir => Path.Combine(Root, "runtime", "python");
     public static string RuntimePython => Path.Combine(RuntimeDir, "python.exe");
     public static string PipMarker => Path.Combine(RuntimeDir, ".pip-ok");

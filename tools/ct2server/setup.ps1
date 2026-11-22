@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:LOCALAPPDATA 'OyunAltyazi'
 $venv = Join-Path $root 'ct2\venv'
-$model = Join-Path $root 'models\opus-mt-tc-big-en-tr-ct2'
+$model = Join-Path (Join-Path $env:LOCALAPPDATA 'OyunAltyaziData') 'models\opus-mt-tc-big-en-tr-ct2'
 $tmpv = Join-Path $root 'ct2\convvenv'
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 if (-not (Test-Path "$venv\Scripts\python.exe")) { py -3.12 -m venv $venv }
