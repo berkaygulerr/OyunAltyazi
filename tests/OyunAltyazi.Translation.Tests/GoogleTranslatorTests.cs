@@ -37,8 +37,12 @@ public class GoogleTranslatorTests
     }
     [Fact] public async Task Honors_cancellation()
     {
-        var h = new Fake(async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return Ok(""); });
-        using var cts = new CancellationTokenSource(100);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new GoogleTranslator(new HttpClient(h)).TranslateAsync("x", Ctx, cts.Token));
+        var started = new TaskCompletionSource();
+        var h = new Fake(async (_, ct) => { started.TrySetResult(); await Task.Delay(Timeout.Infinite, ct); return Ok(""); });
+        using var cts = new CancellationTokenSource();
+        var call = new GoogleTranslator(new HttpClient(h)).TranslateAsync("x", Ctx, cts.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
     }
 }
