@@ -20,6 +20,20 @@ public partial class App : Application
     public TranslationChain Chain { get; private set; } = null!;
     public LatencyStats Stats { get; } = new();
     public WindowsOcrEngine? Ocr { get; private set; }
+
+    public UpdateService Updates { get; } = new();
+
+    public event Action? ComponentsChanged;
+
+    public void RefreshOcr() => Ocr = WindowsOcrEngine.TryCreate();
+
+    public void NotifyComponentsChanged() => ComponentsChanged?.Invoke();
+
+    public void LogSetup(string s)
+    {
+        try { var f = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OyunAltyazi", "logs", "setup.log"); Directory.CreateDirectory(Path.GetDirectoryName(f)!); File.AppendAllText(f, $"{DateTime.Now:s} {s}{Environment.NewLine}"); } catch (Exception) { }
+
+    }
     public string TranslatorName { get; private set; } = "";
 
     protected override void OnStartup(StartupEventArgs e)
@@ -33,7 +47,10 @@ public partial class App : Application
         Cache = new SqliteTranslationCache(Path.Combine(dir, "cache.db"));
         SetTranslator(Settings.Load().Translator);
         Ocr = WindowsOcrEngine.TryCreate();
-        new MainWindow().Show();
+        var main = new MainWindow();
+        main.Show();
+        Updates.Start();
+        if (!LocalInstalled || Ocr is null) new SetupWindow { Owner = main }.Show();
     }
 
     private readonly GoogleTranslator _google = new(new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
@@ -47,7 +64,7 @@ public partial class App : Application
         bool wantLocal = choice != "google_only" && choice != "google_forced";
         if (wantLocal && LocalInstalled)
         {
-            _ct2 ??= new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.VenvPython, Ct2Paths.FindServerScript()!, Ct2Paths.ModelDir));
+            _ct2 ??= new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.FindPython()!, Ct2Paths.FindServerScript()!, Ct2Paths.ModelDir));
             _ = _ct2.WarmUpAsync();
             t = _ct2;
         }
@@ -57,6 +74,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Updates.Dispose();
+
         _ct2?.Dispose();
         Cache?.Dispose();
         base.OnExit(e);

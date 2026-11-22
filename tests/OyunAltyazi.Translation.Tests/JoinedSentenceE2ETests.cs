@@ -11,7 +11,7 @@ public class JoinedSentenceE2ETests(ITestOutputHelper output)
     {
         var script = Ct2Paths.FindServerScript();
         if (script is null || !Ct2Paths.IsInstalled(script)) return; // CT2 yok: atlandı
-        using var t = new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.VenvPython, script, Ct2Paths.ModelDir));
+        using var t = new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.FindPython()!, script, Ct2Paths.ModelDir));
         var ctx = new TranslationContext("g", [], null);
         var j = new SentenceJoiner();
         var a = new SubtitleText(null, "We have to get to the extraction point");
@@ -33,7 +33,7 @@ public class JoinedSentenceE2ETests(ITestOutputHelper output)
     {
         var script = Ct2Paths.FindServerScript();
         if (script is null || !Ct2Paths.IsInstalled(script)) return;
-        using var t = new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.VenvPython, script, Ct2Paths.ModelDir), TimeSpan.FromSeconds(10));
+        using var t = new Ct2Translator(Ct2Paths.ProcessLauncher(Ct2Paths.FindPython()!, script, Ct2Paths.ModelDir), TimeSpan.FromSeconds(10));
         var ctx = new TranslationContext("g", [], null);
         await t.TranslateAsync("Warm.", ctx, default);
         var tr1 = await t.TranslateAsync(f1, ctx, default);

@@ -61,6 +61,7 @@ public sealed partial class MainWindow : Window
         RefreshList(selectLast: true);
         UpdateButtons();
         _ready = true;
+        InitSetupUi();
         // Ekran görüntüsü doğrulaması için: OYUNALTYAZI_TAB=0..3 başlangıç sekmesini, OYUNALTYAZI_COMBO=1 açılır listeyi açar.
         if (int.TryParse(Environment.GetEnvironmentVariable("OYUNALTYAZI_TAB"), out var tab) && tab is >= 0 and < 4) Tabs.SelectedIndex = tab;
         if (Environment.GetEnvironmentVariable("OYUNALTYAZI_COMBO") == "1") Loaded += (_, _) => WindowCombo.IsDropDownOpen = true;

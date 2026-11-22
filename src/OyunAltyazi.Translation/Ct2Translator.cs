@@ -19,10 +19,21 @@ public static class Ct2Paths
 {
     public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OyunAltyazi");
     public static string VenvPython => Path.Combine(Root, "ct2", "venv", "Scripts", "python.exe");
+    public static string RuntimeDir => Path.Combine(Root, "runtime", "python");
+    public static string RuntimePython => Path.Combine(RuntimeDir, "python.exe");
+    public static string PipMarker => Path.Combine(RuntimeDir, ".pip-ok");
+    public static string PackagesMarker => Path.Combine(RuntimeDir, ".pkgs-ok");
     public static string ModelDir => Path.Combine(Root, "models", "opus-mt-tc-big-en-tr-ct2");
+
+    public static bool RuntimeReady => File.Exists(RuntimePython) && File.Exists(PackagesMarker);
+
+    /// <summary>Uygulama paketindeki python (runtime) varsa o; yoksa geliştirici venv'i.</summary>
+    public static string? FindPython() => RuntimeReady ? RuntimePython : File.Exists(VenvPython) ? VenvPython : null;
 
     public static string? FindServerScript()
     {
+        var packaged = Path.Combine(AppContext.BaseDirectory, "server.py");
+        if (File.Exists(packaged)) return packaged;
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
         {
             var p = Path.Combine(d.FullName, "tools", "ct2server", "server.py");
@@ -31,8 +42,10 @@ public static class Ct2Paths
         return null;
     }
 
+    public static bool ModelReady => File.Exists(Path.Combine(ModelDir, "model.bin")) && File.Exists(Path.Combine(ModelDir, "target.spm"));
+
     public static bool IsInstalled(string? script = null) =>
-        File.Exists(VenvPython) && File.Exists(Path.Combine(ModelDir, "model.bin")) && (script ?? FindServerScript()) is not null;
+        FindPython() is not null && ModelReady && (script ?? FindServerScript()) is not null;
 
     public static SidecarLauncher ProcessLauncher(string python, string script, string modelDir) => () =>
     {

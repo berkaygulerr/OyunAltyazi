@@ -3,3 +3,13 @@ obj/
 *.user
 .vs/
 publish/
+
+# distribution / local data
+*.zip
+*.onnx
+models/
+footage/
+*.mp4
+*.mkv
+Releases/
+.vpk/

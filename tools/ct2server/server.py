@@ -6,7 +6,8 @@ import sys, os, json, time, argparse
 def add_dll_dirs():
     # pip nvidia-* wheels put cublas/cudnn DLLs under site-packages\nvidia\*\bin
     import site
-    for sp in site.getsitepackages():
+    sps = list(site.getsitepackages()) + [os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")]
+    for sp in dict.fromkeys(sps):
         nv = os.path.join(sp, "nvidia")
         if os.path.isdir(nv):
             for d in os.listdir(nv):
