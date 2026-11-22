@@ -13,7 +13,7 @@ public sealed class ComponentInstaller(HttpClient http)
     public const string PythonUrl = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip";
     public const string PythonSha256 = "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3";
     public const string GetPipUrl = "https://bootstrap.pypa.io/get-pip.py";
-    public const string ModelUrl = "https://github.com/berkaygulerr/OyunAltyazi-assets/releases/download/model-v1/opus-mt-tc-big-en-tr-ct2.zip";
+    public const string ModelUrl = "https://github.com/berkaygulerr/OyunAltyazi/releases/download/model-v1/opus-mt-tc-big-en-tr-ct2.zip";
     public const string ModelSha256 = "04a4b7a9c9a1e55b23a99a3aace45b115a9f8920dd29f09591d029e2c3d54d8d";
 
     public static bool HasNvidiaGpu() =>

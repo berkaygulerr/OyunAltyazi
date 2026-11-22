@@ -13,3 +13,11 @@ footage/
 *.mkv
 Releases/
 .vpk/
+
+# misc
+*.log
+.env
+.env.*
+*.pfx
+*.snk
+logs/

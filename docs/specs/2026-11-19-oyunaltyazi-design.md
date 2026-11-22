@@ -28,7 +28,7 @@ GameSubTranslate (Electron) ve sefflex/GameTranslator'dan öğrenilenlerle **ayr
 ## Kısıtlar
 - Windows 10 1903+ / 11, x64. Geliştirme makinesi: RTX 4060 8 GB. Oyun VRAM'in çoğunu kullanır.
 - Kullanıcının test oyunu yeni bir CoD (MW4); bunun için hazır yama yok → çevrimiçi/yerel çeviri yolu MVP'de birincil yol.
-- Lisans: kendi lisansımız (ör. MIT). AGPL koddan türetme yok (clean-room: kod okunmadan, yalnız davranış/biçim açıklamasından yazılır).
+- Lisans: AGPL-3.0-only (sonradan değişti: kodun bir kısmı sefflex/GameTranslator'dan uyarlandı).
 
 ## Yaklaşımlar
 | Yaklaşım | Artı | Eksi |

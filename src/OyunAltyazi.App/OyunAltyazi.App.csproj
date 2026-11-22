@@ -24,6 +24,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <StartupObject>OyunAltyazi.App.Program</StartupObject>
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <Authors>Berkay Güler</Authors>
+    <Copyright>© 2026 Berkay Güler</Copyright>
+    <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/berkaygulerr/OyunAltyazi</RepositoryUrl>
     <Version Condition="'$(Version)' == ''">1.0.0</Version>
   </PropertyGroup>
 

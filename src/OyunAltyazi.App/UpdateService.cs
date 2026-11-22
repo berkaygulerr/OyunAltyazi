@@ -8,7 +8,7 @@ namespace OyunAltyazi.App;
 /// <summary>GitHub Releases'ten sessiz güncelleme: arka planda denetle + indir, çıkışta uygula; yeniden başlatmayı kullanıcı seçer.</summary>
 public sealed class UpdateService : IDisposable
 {
-    public const string RepoUrl = "https://github.com/berkaygulerr/OyunAltyazi-releases";
+    public const string RepoUrl = "https://github.com/berkaygulerr/OyunAltyazi";
 
     private readonly UpdateManager? _mgr;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(30) };

@@ -4,10 +4,10 @@ param([string]$Version)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
-$repo = 'https://github.com/berkaygulerr/OyunAltyazi-releases'
+$repo = 'https://github.com/berkaygulerr/OyunAltyazi'
 $token = (gh auth token)
 if (-not $Version) {
-  $last = (gh release list -R berkaygulerr/OyunAltyazi-releases -L 1 --json tagName --jq '.[0].tagName' 2>$null)
+  $last = (gh release list -R berkaygulerr/OyunAltyazi -L 1 --json tagName --jq '.[0].tagName' 2>$null)
   $n = if ($last -match '^v1\.0\.(\d+)$') { [int]$Matches[1] + 1 } else { 1 }
   $Version = "1.0.$n"
 }

@@ -1,5 +1,20 @@
 # Üçüncü taraf bileşenler / Third-party notices
 
+OyunAltyazı, **GNU AGPL-3.0-only** lisanslıdır (bkz. `LICENSE`). Aşağıdaki projelere borçludur:
+
+## Uyarlanan kod / Adapted code (AGPL-3.0)
+
+- **[GameTranslator](https://github.com/sefflex/GameTranslator)** — © sefflex, AGPL-3.0. Arayüz tasarımı ve OCR sonrası metin işleme bölümleri (metin temizleme, tuş ipuçları, kararlılık/eşleştirme vb.) bu projeden uyarlanmıştır.
+- **CouchSubs** — © Sinan Yorulmaz, AGPL-3.0. GameTranslator'ın temelini oluşturan özgün proje; fikir ve bazı bölümler oradan gelir.
+- **english-words.txt.gz** (`src/OyunAltyazi.Core/Resources`) — SCOWL/ESDB size-60 İngilizce sözcük listesi, GameTranslator'dan alınmıştır. SCOWL lisansı: http://wordlist.aspell.net/scowl-readme/
+
+## Kütüphaneler / Libraries
+
+- **[Velopack](https://github.com/velopack/velopack)** — MIT. Kurulum ve otomatik güncelleme.
+- **[Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows)** (Vortice.Direct3D11) — MIT. Ekran yakalama.
+- **Microsoft.Data.Sqlite** — MIT. Çeviri önbelleği.
+- **Python 3.12 (embeddable)** — PSF License; ilk açılışta python.org'dan indirilir, dağıtılmaz.
+
 ## Yerel çeviri (isteğe bağlı) / Local translation (optional)
 
 - **Model:** [Helsinki-NLP/opus-mt-tc-big-en-tr](https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-en-tr)
@@ -14,6 +29,5 @@
 `powershell -ExecutionPolicy Bypass -File tools\ct2server\setup.ps1` — Python 3.12 venv'i ve modeli `%LOCALAPPDATA%\OyunAltyazi` altına kurar.
 Kurulu değilse uygulama Google çevirisine döner.
 
-Parts adapted from GameTranslator (sefflex) / CouchSubs (Sinan Yorulmaz), AGPL-3.0
 
 - **english-words.txt.gz** (src/OyunAltyazi.Core/Resources) — SCOWL/ESDB size-60 English word list taken from GameTranslator (sefflex), AGPL-3.0; SCOWL license: http://wordlist.aspell.net/scowl-readme/

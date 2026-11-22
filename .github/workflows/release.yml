@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release
@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-latest
     env:
       VPK_VERSION: "1.2.161"
-      REPO_URL: https://github.com/berkaygulerr/OyunAltyazi-releases
+      REPO_URL: https://github.com/berkaygulerr/OyunAltyazi
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -37,7 +37,7 @@ jobs:
       - name: Download previous release (for deltas)
         shell: bash
         continue-on-error: true
-        run: vpk download github --repoUrl "$REPO_URL" --token "${{ secrets.RELEASES_TOKEN }}"
+        run: vpk download github --repoUrl "$REPO_URL" --token "${{ secrets.GITHUB_TOKEN }}"
       - name: Pack
         shell: bash
         run: |
@@ -47,4 +47,4 @@ jobs:
         shell: bash
         run: |
           ver="1.0.${{ github.run_number }}"
-          vpk upload github --repoUrl "$REPO_URL" --publish --releaseName "OyunAltyazi $ver" --tag v$ver --token "${{ secrets.RELEASES_TOKEN }}"
+          vpk upload github --repoUrl "$REPO_URL" --publish --releaseName "OyunAltyazi $ver" --tag v$ver --token "${{ secrets.GITHUB_TOKEN }}"

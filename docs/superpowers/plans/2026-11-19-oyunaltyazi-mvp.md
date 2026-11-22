@@ -12,7 +12,7 @@
 
 ## Global Constraints
 - Windows 10 1903+ / 11, x64. Hedef çerçeve: Core/Translation `net10.0`, App `net10.0-windows10.0.22621.0`.
-- Lisans MIT. sefflex/GameTranslator (AGPL-3.0) kodu kopyalanmaz, satır satır çevrilmez; yalnız veri biçimi (yama anahtarı) kullanılır.
+- Lisans başlangıçta MIT planlandı; sonradan AGPL-3.0-only oldu (bkz. LICENSE). sefflex/GameTranslator (AGPL-3.0) kodu kopyalanmaz, satır satır çevrilmez; yalnız veri biçimi (yama anahtarı) kullanılır.
 - Telemetri yok; ağ çağrısı yalnız seçili çevirmene.
 - Ayarlar `%APPDATA%\OyunAltyazi\` altında; API anahtarı (MVP'de yok) gelecekte DPAPI ile.
 - Gecikme hedefleri: önbellek isabetinde sabitlenmeden overlay'e < 150 ms; çevrimiçi çeviride < 1 sn.
