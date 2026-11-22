@@ -7,9 +7,8 @@ namespace OyunAltyazi.Core;
 public sealed record PackCatalogEntry(string Id, string Title, string Url, string Sha256, long Size, string[] Exes);
 
 /// <summary>
-/// Small reviewed catalog of genuinely published GameTranslator packs (https://gitlab.com/sefflex/GameTranslator, folder yamalar/). Each entry pins a commit
-/// and a SHA-256. Games are recognised ONLY by an exact, lower-case executable file name that was confirmed against Discord's public detectable-application
-/// list (never by window title, never fuzzy). Shared or ambiguous executables (cod.exe: MW2 2022 / MW3 / BO6 ...) and editions without a confirmed exe are left out.
+/// Reviewed GameTranslator packs. Each entry pins a commit and a SHA-256. Runtime recognition uses
+/// PackFingerprints; executable aliases are only used by the explicit executable lookup API.
 /// </summary>
 public sealed class PackCatalog
 {
@@ -76,6 +75,11 @@ public sealed class AutoPackService
     {
         var entry = _catalog.Find(exe);
         if (entry is null) return new(AutoPackState.NoMatch);
+        return await GetAsync(entry, exe, ct);
+    }
+
+    internal async Task<AutoPackResult> GetAsync(PackCatalogEntry entry, string exe, CancellationToken ct)
+    {
         var game = exe.Trim();
         var task = _inflight.GetOrAdd(entry.Id + "|" + game, k => Task.Run(async () =>
         {
@@ -149,11 +153,15 @@ public sealed class AutoPackService
 }
 
 /// <summary>Keeps the auto pack of the CURRENTLY selected game in <see cref="LocalTranslations"/>; manual packs always win and are never replaced or removed here.</summary>
-public sealed class AutoPackCoordinator(LocalTranslations local, AutoPackService service, Func<bool> enabled)
+public sealed class AutoPackCoordinator(LocalTranslations local, AutoPackService service, Func<bool> enabled,
+                                        Func<string, PackCatalogEntry?>? findFingerprint = null)
 {
     private readonly object _gate = new();
-    private readonly Dictionary<string, GamePack> _auto = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
+    private readonly Dictionary<PackCatalogEntry, int> _votes = new();
+    private GamePack? _auto;
     private int _gen;
+    private int _selection;
 
     public AutoPackState State { get; private set; } = AutoPackState.NoMatch;
     public string? Exe { get; private set; }
@@ -161,30 +169,83 @@ public sealed class AutoPackCoordinator(LocalTranslations local, AutoPackService
     public string? Error { get; private set; }
     public event Action? Changed;
 
-    /// <summary>Call whenever the selected game, the opt-out switch or the manual files change. Returns once the (possible) download has finished; never blocks the caller before that.</summary>
+    // The executable is only the existing LocalTranslations storage key, not a detection signal.
     public Task SelectAsync(string? exe)
     {
-        exe = exe?.Trim();
-        int gen; Task? work = null;
         lock (_gate)
         {
-            gen = ++_gen; Exe = exe;
-            foreach (var (g, p) in _auto.ToList())
-                if (!string.Equals(g, exe, StringComparison.OrdinalIgnoreCase) || !enabled()) { local.ClearPackIf(g, p); _auto.Remove(g); }
-            Title = null; Error = null;
-            if (string.IsNullOrEmpty(exe) || service.Catalog.Find(exe) is not { } entry) State = AutoPackState.NoMatch;
-            else if (!enabled()) State = AutoPackState.Off;
-            else if (local.PackFor(exe) is { } cur) { var mine = _auto.GetValueOrDefault(exe) == cur; State = mine ? AutoPackState.Ready : AutoPackState.Manual; Title = entry.Title; }
-            else { State = AutoPackState.Loading; Title = entry.Title; work = RunAsync(gen, exe); }
+            _selection++;
+            ClearAuto();
+            Exe = exe?.Trim();
+            ResetDetection();
         }
         Changed?.Invoke();
-        return work ?? Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    private async Task RunAsync(int gen, string exe)
+    public void Refresh()
+    {
+        lock (_gate)
+        {
+            if (enabled() && _auto is not null && Exe is { } exe && local.PackFor(exe) == _auto) return;
+            ClearAuto();
+            ResetDetection();
+        }
+        Changed?.Invoke();
+    }
+
+    private void ClearAuto()
+    {
+        if (_auto is not null && Exe is { } old) local.ClearPackIf(old, _auto);
+        _auto = null;
+    }
+
+    private void ResetDetection()
+    {
+        _gen++;
+        _seen.Clear(); _votes.Clear();
+        Title = null; Error = null;
+        State = !string.IsNullOrEmpty(Exe) && local.PackFor(Exe) is not null ? AutoPackState.Manual
+            : enabled() ? AutoPackState.NoMatch : AutoPackState.Off;
+    }
+
+    public Func<string, Task> ObserverForSelection()
+    {
+        lock (_gate)
+        {
+            int selection = _selection;
+            return text => ObserveAsync(selection, text);
+        }
+    }
+
+    private Task ObserveAsync(int selection, string text)
+    {
+        lock (_gate)
+        {
+            if (selection != _selection || State != AutoPackState.NoMatch || string.IsNullOrEmpty(Exe) || findFingerprint is null)
+                return Task.CompletedTask;
+            var canon = TextKey.Canon(text);
+            if (canon.Length < 18 || canon.Count(c => c == ' ') < 3 || _seen.Contains(canon))
+                return Task.CompletedTask;
+            if (findFingerprint(canon) is not { } entry || !_seen.Add(canon)) return Task.CompletedTask;
+            int count = _votes[entry] = _votes.GetValueOrDefault(entry) + 1;
+            if (count < 3 || _votes.Any(v => v.Key != entry && v.Value >= count - 1)) return Task.CompletedTask;
+            State = AutoPackState.Loading; Title = entry.Title;
+            int gen = _gen;
+            string exe = Exe;
+            return Task.Run(async () =>
+            {
+                lock (_gate) { if (gen != _gen) return; }
+                Changed?.Invoke();
+                await RunAsync(gen, exe, entry).ConfigureAwait(false);
+            });
+        }
+    }
+
+    private async Task RunAsync(int gen, string exe, PackCatalogEntry entry)
     {
         AutoPackResult r;
-        try { r = await service.GetAsync(exe, default); }
+        try { r = await service.GetAsync(entry, exe, default).ConfigureAwait(false); }
         catch (Exception ex) { r = new(AutoPackState.Failed, Error: ex.Message); }
         lock (_gate)
         {
@@ -192,7 +253,7 @@ public sealed class AutoPackCoordinator(LocalTranslations local, AutoPackService
             if (!enabled()) State = AutoPackState.Off;
             else if (r.State == AutoPackState.Ready && r.Pack is not null)
             {
-                if (local.TrySetPackIfAbsent(exe, r.Pack)) { _auto[exe] = r.Pack; State = AutoPackState.Ready; }
+                if (local.TrySetPackIfAbsent(exe, r.Pack)) { _auto = r.Pack; State = AutoPackState.Ready; }
                 else State = AutoPackState.Manual;                    // the user's own file arrived first
             }
             else { State = AutoPackState.Failed; Error = r.Error; }

@@ -220,14 +220,73 @@ public class AutoPackCoordinatorTests
         var h = new FakeHandler(async (r, ct) => { await gate.Task; var id = Path.GetFileNameWithoutExtension(r.RequestUri!.AbsolutePath); return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(bodies[id]) }; });
         var l = new LocalTranslations();
         var svc = new AutoPackService(new PackCatalog(cat), AutoPackFixtures.TempDir(), new HttpClient(h));
-        return (new AutoPackCoordinator(l, svc, en ?? (() => enabled)), l, h, gate);
+        return (new AutoPackCoordinator(l, svc, en ?? (() => enabled), text => text.StartsWith("alpha ") ? cat[0] : text.StartsWith("beta ") ? cat[1] : null), l, h, gate);
     }
     private static string? Tr(LocalTranslations l, string g) => l.TryGet(g, "Cover me.", out var t, out _) ? t : null;
 
-    [Fact] public async Task Selecting_a_known_game_installs_the_pack_asynchronously()
+    [Fact] public async Task Executable_name_alone_does_not_select_a_pack()
+    {
+        var (c, l, h, gate) = Make();
+        gate.SetResult();
+        await c.SelectAsync("g1.exe");
+        Assert.Null(l.PackFor("g1.exe"));
+        Assert.Equal(0, h.Calls);
+    }
+
+    private static async Task Detect(AutoPackCoordinator c, string exe, string word = "alpha")
+    {
+        await c.SelectAsync(exe);
+        var observe = c.ObserverForSelection();
+        await observe($"{word} we crossed the old bridge");
+        await observe($"{word} we waited for the signal");
+        await observe($"{word} they found the missing key");
+    }
+
+    [Fact] public async Task Distinct_dialogue_selects_pack_even_with_unknown_executable()
+    {
+        var (c, l, h, gate) = Make(); gate.SetResult();
+        await c.SelectAsync("renamed.exe");
+        var observe = c.ObserverForSelection();
+        await observe("alpha short line");
+        await observe("This unrelated dialogue does not match anything.");
+        await observe("alpha we crossed the old bridge");
+        await observe("ALPHA we crossed the old bridge!");
+        await observe("alpha we waited for the signal");
+        Assert.Equal(0, h.Calls);
+        await observe("alpha they found the missing key");
+        Assert.Equal(1, h.Calls);
+        Assert.Equal("TR-g1", Tr(l, "renamed.exe"));
+    }
+
+    [Fact] public async Task Similar_candidate_scores_prevent_selection()
+    {
+        var (c, _, h, gate) = Make(); gate.SetResult();
+        await c.SelectAsync("shared.exe");
+        var observe = c.ObserverForSelection();
+        await observe("beta we crossed the old bridge");
+        await observe("beta we waited for the signal");
+        await observe("alpha we crossed the old bridge");
+        await observe("alpha we waited for the signal");
+        await observe("alpha they found the missing key");
+        Assert.Equal(0, h.Calls);
+    }
+
+    [Fact] public async Task Old_observer_cannot_vote_for_another_window_with_the_same_executable()
+    {
+        var (c, _, h, gate) = Make(); gate.SetResult();
+        await c.SelectAsync("shared.exe");
+        var stale = c.ObserverForSelection();
+        await c.SelectAsync("shared.exe");
+        await stale("alpha we crossed the old bridge");
+        await stale("alpha we waited for the signal");
+        await stale("alpha they found the missing key");
+        Assert.Equal(0, h.Calls);
+    }
+
+    [Fact] public async Task Matching_dialogue_installs_the_pack_asynchronously()
     {
         var (c, l, _, gate) = Make();
-        var task = c.SelectAsync("g1.exe");
+        var task = Detect(c, "g1.exe");
         Assert.Equal(AutoPackState.Loading, c.State); Assert.Null(Tr(l, "g1.exe"));      // select returns before the download completes
         gate.SetResult(); await task;
         Assert.Equal(AutoPackState.Ready, c.State); Assert.Equal("TR-g1", Tr(l, "g1.exe"));
@@ -255,7 +314,7 @@ public class AutoPackCoordinatorTests
     [Fact] public async Task A_manual_pack_imported_while_downloading_is_not_overwritten()
     {
         var (c, l, _, gate) = Make();
-        var task = c.SelectAsync("g1.exe");
+        var task = Detect(c, "g1.exe");
         l.SetPack("g1.exe", GamePack.Parse("""{"version":2,"game":"g1.exe","entries":[{"en":"Cover me.","tr":"MANUEL"}]}""", "g1.exe").Pack!);
         gate.SetResult(); await task;
         Assert.Equal("MANUEL", Tr(l, "g1.exe")); Assert.Equal(AutoPackState.Manual, c.State);
@@ -265,14 +324,14 @@ public class AutoPackCoordinatorTests
     {
         var (c, l, _, gate) = Make(); gate.SetResult();
         l.SetGlossary("g1.exe", GamePack.Parse("""{"version":2,"game":"g1.exe","entries":[{"en":"Cover me.","tr":"SÖZLÜK"}]}""", "g1.exe").Pack!);
-        await c.SelectAsync("g1.exe");
+        await Detect(c, "g1.exe");
         Assert.Equal(AutoPackState.Ready, c.State); Assert.Equal("SÖZLÜK", Tr(l, "g1.exe")); Assert.Equal(TranslationSource.Glossary, Src(l, "g1.exe"));
     }
 
     [Fact] public async Task Switching_games_mid_download_drops_the_stale_result()
     {
         var (c, l, _, gate) = Make();
-        var a = c.SelectAsync("g1.exe"); var b = c.SelectAsync("g2.exe");
+        var a = Detect(c, "g1.exe"); var b = Detect(c, "g2.exe", "beta");
         gate.SetResult(); await Task.WhenAll(a, b);
         Assert.Null(Tr(l, "g1.exe")); Assert.Equal("TR-g2", Tr(l, "g2.exe")); Assert.Equal("g2.exe", c.Exe);
     }
@@ -280,7 +339,7 @@ public class AutoPackCoordinatorTests
     [Fact] public async Task Switching_to_an_unknown_window_mid_download_drops_it_and_releases_other_games_packs()
     {
         var (c, l, _, gate) = Make(); gate.SetResult();
-        await c.SelectAsync("g1.exe"); Assert.Equal("TR-g1", Tr(l, "g1.exe"));
+        await Detect(c, "g1.exe"); Assert.Equal("TR-g1", Tr(l, "g1.exe"));
         await c.SelectAsync("notepad.exe");
         Assert.Null(l.PackFor("g1.exe")); Assert.Equal(AutoPackState.NoMatch, c.State);
     }
@@ -288,11 +347,11 @@ public class AutoPackCoordinatorTests
     [Fact] public async Task Opting_out_clears_the_auto_pack_and_in_flight_results()
     {
         bool on = true; var (c, l, _, gate) = Make(en: () => on);
-        var inflight = c.SelectAsync("g1.exe"); on = false;
+        var inflight = Detect(c, "g1.exe"); on = false;
         gate.SetResult(); await inflight;
         Assert.Null(Tr(l, "g1.exe")); Assert.Equal(AutoPackState.Off, c.State);
 
-        on = true; await c.SelectAsync("g1.exe"); Assert.Equal("TR-g1", Tr(l, "g1.exe"));
+        on = true; await Detect(c, "g1.exe"); Assert.Equal("TR-g1", Tr(l, "g1.exe"));
         on = false; await c.SelectAsync("g1.exe");
         Assert.Null(Tr(l, "g1.exe")); Assert.Equal(AutoPackState.Off, c.State);
     }
@@ -310,15 +369,15 @@ public class AutoPackCoordinatorTests
         var gate = new TaskCompletionSource(); gate.SetResult();
         var d = AutoPackFixtures.Pack("g1"); var l = new LocalTranslations();
         var svc = new AutoPackService(new PackCatalog([AutoPackFixtures.Entry(d)]), AutoPackFixtures.TempDir(), new HttpClient(new FakeHandler((_, _) => throw new HttpRequestException("offline"))));
-        var c = new AutoPackCoordinator(l, svc, () => true);
-        await c.SelectAsync("g1.exe");
+        var c = new AutoPackCoordinator(l, svc, () => true, _ => svc.Catalog.Entries[0]);
+        await Detect(c, "g1.exe");
         Assert.Equal(AutoPackState.Failed, c.State); Assert.False(l.TryGet("g1.exe", "Cover me.", out _, out _)); Assert.Null(l.PackFor("g1.exe"));
     }
 
-    [Fact] public async Task Selecting_the_same_game_again_does_not_download_twice()
+    [Fact] public async Task Refreshing_a_ready_selection_does_not_download_twice()
     {
         var (c, l, h, gate) = Make(); gate.SetResult();
-        await c.SelectAsync("g1.exe"); await c.SelectAsync("g1.exe");
+        await Detect(c, "g1.exe"); c.Refresh(); await c.ObserverForSelection()("alpha we crossed the next bridge");
         Assert.Equal(1, h.Calls); Assert.Equal("TR-g1", Tr(l, "g1.exe"));
     }
 }
@@ -336,6 +395,34 @@ public class AutoPackLiveTests
         return new HttpClient(new FakeHandler((r, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(File.ReadAllBytes(Path.Combine(dir, Path.GetFileName(r.RequestUri!.AbsolutePath)))) })));
     }
     private static bool Enabled => Environment.GetEnvironmentVariable("OA_LIVE") == "1" || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OA_LIVE_DIR"));
+
+    private static readonly string[] EldenEvidence =
+    ["Put these foolish ambitions to rest.", "Someone must extinguish thy flame.", "I am Malenia, Blade of Miquella."];
+
+    [Fact] public void Embedded_index_recognizes_distinct_real_dialogue_and_omits_shared_lines()
+    {
+        var index = PackFingerprints.LoadDefault();
+        Assert.All(EldenEvidence, line => Assert.Equal("elden-ring", index.Find(line)?.Id));
+        Assert.Null(index.Find("Cover me."));
+    }
+
+    [Fact] public async Task Real_dialogue_selects_and_loads_only_the_matching_pack_without_an_exe_alias()
+    {
+        if (!Enabled) return;
+        using var http = Client();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("OyunAltyazi-pack-fetch");
+        var local = new LocalTranslations();
+        var index = PackFingerprints.LoadDefault();
+        var coordinator = new AutoPackCoordinator(local,
+            new AutoPackService(PackCatalog.Default, AutoPackFixtures.TempDir(), http), () => true, index.Find);
+        await coordinator.SelectAsync("renamed-game.exe");
+        var observe = coordinator.ObserverForSelection();
+        foreach (var line in EldenEvidence) await observe(line);
+        Assert.True(coordinator.State == AutoPackState.Ready, coordinator.Error);
+        Assert.Equal("elden-ring", local.PackFor("renamed-game.exe")?.Id);
+        Assert.True(local.TryGet("renamed-game.exe", EldenEvidence[0], out _, out var source));
+        Assert.Equal(TranslationSource.Pack, source);
+    }
 
     [Fact] public async Task Real_modern_warfare_pack_downloads_verifies_and_matches_a_known_line()
     {

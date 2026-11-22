@@ -19,6 +19,7 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
     private readonly int _minIntervalMs = 1000 / Math.Max(1, maxReadsPerSecond);
     private int _busy;
     public Action<ReadLogEntry>? Log { get; set; }
+    public Func<string, Task>? ObserveStableLine { get; set; }
     public bool IsBusy => Volatile.Read(ref _busy) != 0;
     private long _lastReadMs = long.MinValue;
     private long _lastCapturedMs, _lastOcrDoneMs;
@@ -154,7 +155,11 @@ public sealed class SubtitlePipeline(IFrameSource source, IOcrEngine ocr, Transl
                 {
                     case ShowLine show:
                         Slot? slot; lock (_lock) _slots.TryGetValue(key, out slot);
-                        if (slot is not null) StartTranslation(slot, show.Line, slot.Joiner.Feed(show.Line, clockMs()), _lastCapturedMs, _lastOcrDoneMs, clockMs());
+                        if (slot is not null)
+                        {
+                            if (ObserveStableLine is { } observe) _ = observe(show.Line.Text);
+                            StartTranslation(slot, show.Line, slot.Joiner.Feed(show.Line, clockMs()), _lastCapturedMs, _lastOcrDoneMs, clockMs());
+                        }
                         break;
                     case ClearLine:
                         lock (_lock)

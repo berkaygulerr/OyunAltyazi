@@ -39,6 +39,32 @@ public class SqliteTranslationCacheTests : IDisposable
         using var c2 = new SqliteTranslationCache(Db);
         Assert.True(c2.TryGet("mw", "Frag out!", out var t)); Assert.Equal("Bomba!", t);
     }
+    [Fact] public void Reviewed_pack_excludes_other_games_and_unapproved_drafts()
+    {
+        using (var cache = new SqliteTranslationCache(Db))
+        {
+            cache.Put("game.exe", "Wait at the gate.", "Taslak", "ct2");
+            cache.Put("game.exe\u0001gemini", "Wait at the gate.", "Kapıda bekle.", "gemini");
+            cache.Put("game.exe", "Previous\u0001continuation", "Parça", "ct2");
+            cache.Put("other.exe", "Wrong game.", "Başka oyun.", "ct2");
+            Assert.Single(cache.ReviewRows("GAME.EXE"));
+            Assert.Null(cache.ExportReviewedPack("game.exe"));
+            cache.SaveReviewed("game.exe", "Wait at the gate.", "Geçitte bekle.");
+            cache.Put("game.exe", "Wait at the gate.", "Yeni taslak", "ct2");
+        }
+        using var reopened = new SqliteTranslationCache(Db);
+        var row = Assert.Single(reopened.ReviewRows("game.exe"));
+        Assert.Equal("Geçitte bekle.", row.Approved);
+        var result = OyunAltyazi.Core.GamePack.Parse(reopened.ExportReviewedPack("game.exe")!, "game.exe");
+        Assert.True(result.Pack!.TryGet("Wait at the gate.", out var tr));
+        Assert.Equal("Geçitte bekle.", tr);
+        Assert.Null(reopened.ExportReviewedPack("other.exe"));
+        reopened.Clear();
+        Assert.Single(reopened.ReviewRows("game.exe"));
+        reopened.RemoveReviewed("game.exe", "Wait at the gate.");
+        Assert.Null(reopened.ExportReviewedPack("game.exe"));
+    }
+
     [Fact] public void Put_overwrites()
     {
         using var c = new SqliteTranslationCache(Db);

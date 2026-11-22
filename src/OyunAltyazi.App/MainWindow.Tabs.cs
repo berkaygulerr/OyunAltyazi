@@ -296,6 +296,7 @@ public sealed partial class MainWindow
         var exe = _profile?.ExeName;
         bool has = exe is not null;
         PackImportBtn.IsEnabled = GlossaryImportBtn.IsEnabled = has;
+        ReviewBtn.IsEnabled = has;
         PackRemoveBtn.IsEnabled = has && _app.Local.PackFor(exe!) is not null;
         GlossaryRemoveBtn.IsEnabled = has && _app.Local.GlossaryFor(exe!) is not null;
         string Describe(GamePack? p) => p is null ? "yok" : $"{p.Count:N0} satır";
@@ -306,10 +307,10 @@ public sealed partial class MainWindow
         {
             AutoPackState.Loading => $"Hazır paket indiriliyor: {ap.Title}…",
             AutoPackState.Ready => $"Hazır paket kullanılıyor: {ap.Title}",
-            AutoPackState.Manual => $"Kendi dosyanız kullanılıyor (hazır paket: {ap.Title}).",
+            AutoPackState.Manual => "Kendi paket dosyanız kullanılıyor.",
             AutoPackState.Failed => $"Hazır paket alınamadı ({ap.Error}); normal çeviri sürüyor.",
             AutoPackState.Off => "Hazır paketler kapalı.",
-            _ => "Bu oyun için hazır paket yok.",
+            _ => "İngilizce repliklerden hazır paket aranıyor; normal çeviri sürer.",
         };
         var ag = _app.AutoGlossaries;
         bool manualGl = has && _app.Local.GlossaryFor(exe!) is not null;
@@ -328,7 +329,7 @@ public sealed partial class MainWindow
     {
         if (_loadingControls) return;
         _app.Settings.Save(_app.Settings.Load() with { AutoGamePack = AutoPackCheck.IsChecked == true });
-        _ = _app.AutoPacks.SelectAsync(_selected?.ExeName);
+        _app.AutoPacks.Refresh();
         UpdateLocalFilesInfo();
     }
 
@@ -346,15 +347,27 @@ public sealed partial class MainWindow
         var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Oyun paketi (*.json;*.gz)|*.json;*.gz", Title = glossary ? "Sözlük dosyası seç" : "Oyun paketi seç" };
         if (dlg.ShowDialog(this) != true) return;
         var err = _app.ImportLocalFile(_profile.ExeName, dlg.FileName, glossary);
-        if (!glossary) _ = _app.AutoPacks.SelectAsync(_selected?.ExeName);
+        if (!glossary) _app.AutoPacks.Refresh();
         if (err is not null) MessageBox.Show(this, err, "İçe aktarılamadı", MessageBoxButton.OK, MessageBoxImage.Warning);
         UpdateLocalFilesInfo();
     }
 
     private void PackImport_Click(object sender, RoutedEventArgs e) => ImportLocal(glossary: false);
     private void GlossaryImport_Click(object sender, RoutedEventArgs e) => ImportLocal(glossary: true);
-    private void PackRemove_Click(object sender, RoutedEventArgs e) { if (_profile is not null) { _app.RemoveLocalFile(_profile.ExeName, glossary: false); _ = _app.AutoPacks.SelectAsync(_selected?.ExeName); } UpdateLocalFilesInfo(); }
+    private void PackRemove_Click(object sender, RoutedEventArgs e) { if (_profile is not null) { _app.RemoveLocalFile(_profile.ExeName, glossary: false); _app.AutoPacks.Refresh(); } UpdateLocalFilesInfo(); }
     private void GlossaryRemove_Click(object sender, RoutedEventArgs e) { if (_profile is not null) { _app.RemoveLocalFile(_profile.ExeName, glossary: true); _app.AutoGlossaries.Select(_selected?.ExeName); } UpdateLocalFilesInfo(); }
+
+    private void Review_Click(object sender, RoutedEventArgs e)
+    {
+        if (_profile is not { } profile) return;
+        if (Running)
+        {
+            MessageBox.Show(this, "Replikleri incelemek için önce çeviriyi durdur.", "Paket atölyesi");
+            return;
+        }
+        try { new ReviewWindow(_app.Cache, profile.ExeName) { Owner = this }.ShowDialog(); }
+        catch (Microsoft.Data.Sqlite.SqliteException) { MessageBox.Show(this, "Replik geçmişi okunamadı.", "Paket atölyesi"); }
+    }
 
     private void UpdateCacheCount()
     {

@@ -20,7 +20,9 @@
 - **Çevrimdışı yerel çeviri:** Helsinki-NLP `opus-mt-tc-big-en-tr` modeli, CTranslate2 ile (NVIDIA GPU varsa hızlanır). İnternet gerekmez, ücretsizdir. Model yoksa Google çeviriye düşer.
 - **Altyazıyı oyunun üstüne yazar:** İngilizce altyazıyı örten Türkçe kutu; yazı boyutu ve opaklık ayarlanabilir.
 - **OCR gürültü temizleme:** tuş ipuçları (`[E]`, `Press X`), konuşmacı adları ve OCR hataları ayıklanır; kararlı hale gelmeyen satır çevrilmez.
+- **Replikten hazır oyun paketi:** İlk İngilizce replikler cihazda karşılaştırılır. Üç ayrı ayırt edici eşleşme bulunursa yalnızca ilgili paket arka planda indirilir; eşleşmeyen satırlar normal çevrilir.
 - **Çeviri önbelleği:** Daha önce çevrilen satırlar anında gösterilir.
+- **Paket atölyesi:** Çeviri geçmişindeki bir satırın İngilizcesini ve Türkçesini düzenle, onayladığın satırlardan yerel JSON paketi çıkar. Otomatik paylaşım veya yeniden çeviri yapılmaz.
 - **Kısayollar:** `Ctrl+Shift+T` başlat/durdur · `Ctrl+Shift+H` gizle/göster · `Ctrl+Shift+R` bölge seç.
 - **Otomatik güncelleme** (Velopack), arka planda sessizce.
 

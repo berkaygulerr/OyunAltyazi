@@ -99,12 +99,17 @@
         </StackPanel>
     </Border>
 
-    <TabControl x:Name="Tabs" Margin="24,8,24,12" SelectionChanged="Tabs_SelectionChanged">
+    <TabControl x:Name="Tabs" TabStripPlacement="Left" Margin="24,18,24,18" SelectionChanged="Tabs_SelectionChanged">
 
-            <TabItem Header="Okuma Alanı">
+            <TabItem Header="Canlı çalışma">
                 <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="24"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-                    <Border Background="#0B0C0E" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True" MinHeight="160">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="266"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Grid.ColumnSpan="3" Margin="0,0,0,14">
+                        <TextBlock Text="Canlı çalışma" Style="{StaticResource Heading}" FontSize="28"/>
+                        <TextBlock Text="Oyun önizlemesi ve altyazı" Style="{StaticResource Muted}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <Border Grid.Row="1" Background="#0B0C0E" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="12" ClipToBounds="True" MinHeight="160">
                         <Grid>
                             <Viewbox x:Name="PreviewBox" Stretch="Uniform" Visibility="Collapsed">
                                 <Grid x:Name="PreviewHost">
@@ -114,35 +119,39 @@
                                     </Canvas>
                                 </Grid>
                             </Viewbox>
-                            <TextBlock x:Name="PreviewPlaceholder" Text="Önizleme için yukarıdan bir oyun penceresi seçin." Style="{StaticResource Muted}" FontSize="14"
+                            <TextBlock x:Name="PreviewPlaceholder" Text="Önizleme için yukarıdan bir oyun penceresi seç." Style="{StaticResource Muted}" FontSize="14"
                                        Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"/>
                         </Grid>
                     </Border>
-                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel Margin="0,0,10,0">
+                    <ScrollViewer Grid.Row="1" Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                          <Border Style="{StaticResource Card}" Padding="14">
+                           <StackPanel>
                             <TextBlock Text="Okuma alanı" Style="{StaticResource Heading}"/>
-                            <TextBlock Text="OCR yalnızca amber çerçevenin içini okur; altyazının geçtiği yeri kapsasın." Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,12"/>
+                            <TextBlock Text="Altyazının çıktığı alanı işaretle." Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,12"/>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                 <Button x:Name="SelectRegionBtn" Content="Bölgeyi çiz" ToolTip="Ctrl + Shift + R" Click="SelectRegion_Click"/>
-                                <Button x:Name="PreviewRefreshBtn" Grid.Column="2" Content="Önizlemeyi yenile" Click="PreviewRefresh_Click"/>
+                                <Button x:Name="PreviewRefreshBtn" Grid.Column="2" Content="Yenile" ToolTip="Oyun önizlemesini yenile" AutomationProperties.Name="Oyun önizlemesini yenile" Click="PreviewRefresh_Click"/>
                             </Grid>
                             <TextBlock Text="HIZLI BÖLGE" Style="{StaticResource CardTitle}" Margin="0,16,0,6"/>
                             <WrapPanel>
-                                <Button Content="Alt orta" Tag="0.20,0.78,0.60,0.16" Click="Preset_Click" Margin="0,0,6,6" Padding="10,4"/>
-                                <Button Content="Geniş alt bant" Tag="0.03,0.74,0.94,0.22" Click="Preset_Click" Margin="0,0,6,6" Padding="10,4"/>
-                                <Button Content="Alt yarı" Tag="0,0.5,1,0.5" Click="Preset_Click" Margin="0,0,6,6" Padding="10,4"/>
+                                <Button Content="Alt orta" Tag="0.20,0.78,0.60,0.16" Click="Preset_Click" Margin="0,0,4,4" Padding="8,4"/>
+                                <Button Content="Geniş bant" Tag="0.03,0.74,0.94,0.22" Click="Preset_Click" Margin="0,0,4,4" Padding="8,4"/>
+                                <Button Content="Alt yarı" Tag="0,0.5,1,0.5" Click="Preset_Click" Margin="0,0,4,4" Padding="8,4"/>
                             </WrapPanel>
                             <TextBlock x:Name="RegionInfo" Style="{StaticResource Muted}" FontSize="11" FontFamily="Cascadia Mono, Consolas"/>
-                            <Border Style="{StaticResource Section}">
+                           </StackPanel>
+                          </Border>
+                            <Border Style="{StaticResource Card}" Padding="14" Margin="0,12,0,0" MinHeight="116">
                                 <StackPanel>
                                     <DockPanel Margin="0,0,0,6">
                                         <Button x:Name="CopyBtn" DockPanel.Dock="Right" Content="Kopyala" Padding="10,2" FontSize="11" IsEnabled="False" Click="Copy_Click"
                                                 ToolTip="Son çeviriyi panoya kopyala"/>
-                                        <TextBlock Text="SON ALTYAZI" Style="{StaticResource CardTitle}" Margin="0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="CANLI ALTYAZI" Style="{StaticResource CardTitle}" Margin="0" VerticalAlignment="Center"/>
                                     </DockPanel>
                                     <TextBlock x:Name="LastSpeakerText" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="12" Visibility="Collapsed" Margin="0,0,0,2"/>
-                                    <TextBlock x:Name="LastLineText" FontSize="18" TextWrapping="Wrap" Text="—" MaxHeight="140" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="LastLineText" FontSize="21" FontWeight="SemiBold" TextWrapping="Wrap" Text="—" MaxHeight="140" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock x:Name="LastSourceText" Style="{StaticResource Muted}" FontSize="11" Margin="0,6,0,0" Text="Henüz altyazı yok"/>
                                 </StackPanel>
                             </Border>
@@ -155,7 +164,8 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="8,0" MaxWidth="760" HorizontalAlignment="Center"
                                 Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
-                        <Border Height="210" CornerRadius="12" ClipToBounds="True" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                        <TextBlock Text="Altyazı görünümü" Style="{StaticResource Heading}" FontSize="28" Margin="0,0,0,14"/>
+                        <Border Height="190" CornerRadius="12" ClipToBounds="True" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                             <Border.Background><SolidColorBrush Color="#1A1C20"/></Border.Background>
                             <Grid>
                                 <TextBlock Text="ÖRNEK ALTYAZI" Style="{StaticResource CardTitle}" Margin="14,12,0,0" Opacity="0.7"/>
@@ -196,7 +206,7 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="8,0" MaxWidth="760" HorizontalAlignment="Center"
                                 Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
-                        <TextBlock Text="Çevirmen" Style="{StaticResource Heading}" Margin="2,0,0,10"/>
+                        <TextBlock Text="Çeviri" Style="{StaticResource Heading}" FontSize="28" Margin="0,0,0,14"/>
                         <RadioButton x:Name="TrLocal" Style="{StaticResource RadioCard}" GroupName="tr" Checked="Translator_Checked">
                             <StackPanel>
                                 <DockPanel>
@@ -245,25 +255,26 @@
                         </Border>
                         <TextBlock x:Name="TrLockedNote" Text="Çeviri çalışırken çevirmen değiştirilemez; önce durdurun." Style="{StaticResource Muted}" FontSize="11" Margin="2,8,0,0" Visibility="Collapsed"/>
 
-                        <Border Style="{StaticResource Section}" Margin="0,18,0,0">
+                        <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                             <StackPanel>
                                 <TextBlock Text="OYUN PAKETİ VE SÖZLÜK (YEREL)" Style="{StaticResource CardTitle}" Margin="0,0,0,6"/>
                                 <TextBlock x:Name="LocalFilesInfo" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
                                 <TextBlock x:Name="AutoPackStatus" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                 <TextBlock x:Name="AutoGlossaryStatus" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                 <CheckBox x:Name="AutoGlossaryCheck" Content="Bilinen oyunlar için yerleşik sözlüğü otomatik kullan (çevrimdışı, ağ yok)" Margin="0,6,0,0" Click="AutoGlossaryCheck_Click"/>
-                                <CheckBox x:Name="AutoPackCheck" Content="Bilinen oyunlar için hazır paketi otomatik kullan (yalnızca paket dosyası indirilir)" Margin="0,6,0,0" Click="AutoPackCheck_Click"/>
+                                <CheckBox x:Name="AutoPackCheck" Content="Repliklerden oyunu tanı ve hazır paketi otomatik kullan" Margin="0,6,0,0" Click="AutoPackCheck_Click"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button x:Name="PackImportBtn" Content="Oyun paketi seç…" Click="PackImport_Click"/>
                                     <Button x:Name="PackRemoveBtn" Content="Kaldır" Margin="6,0,0,0" Click="PackRemove_Click"/>
                                     <Button x:Name="GlossaryImportBtn" Content="Sözlük seç…" Margin="16,0,0,0" Click="GlossaryImport_Click"/>
                                     <Button x:Name="GlossaryRemoveBtn" Content="Kaldır" Margin="6,0,0,0" Click="GlossaryRemove_Click"/>
                                 </StackPanel>
+                                <Button x:Name="ReviewBtn" HorizontalAlignment="Left" Content="Paket atölyesini aç…" Click="Review_Click" Margin="0,10,0,0"/>
                                 <TextBlock Text="Dosya yalnızca seçili oyun için geçerlidir ve kendi bilgisayarınızda kalır. Tam eşleşen satırlar önbellekten ve modelden önce kullanılır; telif hakkıyla korunan diyalogları paylaşmayın." Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Section}" Margin="0,18,0,0">
+                        <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                             <DockPanel>
                                 <Button x:Name="ClearCacheBtn" DockPanel.Dock="Right" Content="Önbelleği temizle" VerticalAlignment="Center" Click="ClearCache_Click"/>
                                 <StackPanel>
@@ -284,7 +295,8 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="8,0" MaxWidth="760" HorizontalAlignment="Center"
                                 Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
-                        <Border Style="{StaticResource Section}" Margin="0" BorderThickness="0" Padding="0">
+                        <TextBlock Text="Sistem" Style="{StaticResource Heading}" FontSize="28" Margin="0,0,0,14"/>
+                        <Border Style="{StaticResource Card}" Margin="0">
                             <StackPanel>
                                 <TextBlock Text="KISAYOLLAR" Style="{StaticResource CardTitle}"/>
                                 <Grid>

@@ -27,7 +27,7 @@
     <SolidColorBrush x:Key="AccentTintBrush" Color="#29E3A73B"/>
 
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
-    <CornerRadius x:Key="CardRadius">8</CornerRadius>
+    <CornerRadius x:Key="CardRadius">12</CornerRadius>
     <CornerRadius x:Key="CtlRadius">6</CornerRadius>
 
     <Style x:Key="AppWindow" TargetType="Window">
@@ -401,7 +401,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- TabControl: alt çizgili sekmeler -->
+    <!-- TabControl: kalıcı sol gezinme -->
     <Style TargetType="TabItem">
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -410,13 +410,14 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
-                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="4,8" Margin="0,0,20,-1">
-                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,4">
+                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{StaticResource TextBrush}"/></Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{StaticResource Card2Brush}"/><Setter Property="Foreground" Value="{StaticResource TextBrush}"/></Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentTintBrush}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
                             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -432,11 +433,14 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TabControl">
                     <Grid>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,16">
-                            <TabPanel IsItemsHost="True" HorizontalAlignment="Center"/>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="174"/><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource Card}" Padding="9,14">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="ÇALIŞMA ALANI" Style="{StaticResource CardTitle}" Margin="12,3,0,12"/>
+                                <TabPanel IsItemsHost="True" VerticalAlignment="Top" KeyboardNavigation.TabNavigation="Once"/>
+                            </DockPanel>
                         </Border>
-                        <ContentPresenter Grid.Row="1" ContentSource="SelectedContent"/>
+                        <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Column="2" ContentSource="SelectedContent"/>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

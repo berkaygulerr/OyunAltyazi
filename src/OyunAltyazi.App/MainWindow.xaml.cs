@@ -120,7 +120,7 @@ public sealed partial class MainWindow : Window
         }
         if (info is not null) _app.ApplyLocalFiles(info.ExeName);
         _app.AutoGlossaries.Select(info?.ExeName);
-        _ = _app.AutoPacks.SelectAsync(info?.ExeName);   // async, never blocks; manual pack/glossary files above always win
+        _ = _app.AutoPacks.SelectAsync(info?.ExeName);   // set the observation scope; manual files above always win
         LoadProfileControls();
         UpdateButtons();
         if (_ready) RefreshPreview();
@@ -168,6 +168,7 @@ public sealed partial class MainWindow : Window
             try { _diagLog = new DiagnosticLog(LogDirectory, profile.ExeName); _pipeline.Log = _diagLog.Write; }
             catch (Exception) { _diagLog = null; }
         }
+        _pipeline.ObserveStableLine = _app.AutoPacks.ObserverForSelection();
         _pipeline.Start();
         SetStatus("Çalışıyor…");
         UpdateButtons();

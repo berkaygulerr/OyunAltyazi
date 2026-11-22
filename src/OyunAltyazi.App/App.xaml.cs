@@ -22,7 +22,7 @@ public partial class App : Application
     /// <summary>Opt-in local glossary / game pack lookups (exact match, per game). Local files only.</summary>
     public LocalTranslations Local { get; } = new();
 
-    /// <summary>Ready-made catalog pack for the selected game (exact exe match, async, cached under %AppData%\OyunAltyaziutopacks). Manual files always win.</summary>
+    /// <summary>Ready-made catalog pack matched from stable dialogue. Manual files always win.</summary>
     public AutoPackCoordinator AutoPacks { get; private set; } = null!;
 
     /// <summary>Built-in offline glossary for confidently recognised games (exact exe match, no network, no files).</summary>
@@ -114,7 +114,10 @@ public partial class App : Application
         Settings = new SettingsStore(dir); KeyStore = new DpapiKeyStore(dir);
         var autoHttp = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = true }) { Timeout = TimeSpan.FromSeconds(130) };
         autoHttp.DefaultRequestHeaders.UserAgent.ParseAdd("OyunAltyazi-pack-fetch");
-        AutoPacks = new AutoPackCoordinator(Local, new AutoPackService(PackCatalog.Default, Path.Combine(dir, "autopacks"), autoHttp), () => Settings.Load().AutoGamePack);
+        // Warm the local hash index without delaying app startup or OCR.
+        var fingerprints = Task.Run(PackFingerprints.LoadDefault);
+        AutoPacks = new AutoPackCoordinator(Local, new AutoPackService(PackCatalog.Default, Path.Combine(dir, "autopacks"), autoHttp),
+            () => Settings.Load().AutoGamePack, text => fingerprints.IsCompletedSuccessfully ? fingerprints.Result.Find(text) : null);
         AutoGlossaries = new AutoGlossaryCoordinator(Local, AutoGlossaryCatalog.Default, () => Settings.Load().AutoGlossary);
         Cache = new SqliteTranslationCache(Path.Combine(dir, "cache.db"));
         SetTranslator(Settings.Load().Translator);

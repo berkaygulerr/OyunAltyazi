@@ -4,7 +4,7 @@ using OyunAltyazi.Core;
 
 namespace OyunAltyazi.Translation;
 
-public sealed class SqliteTranslationCache : ITranslationCache, IDisposable
+public sealed partial class SqliteTranslationCache : ITranslationCache, IDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly object _lock = new();
@@ -17,6 +17,7 @@ public sealed class SqliteTranslationCache : ITranslationCache, IDisposable
         _conn.Open();
         Exec("PRAGMA journal_mode=WAL;");
         Exec("CREATE TABLE IF NOT EXISTS translations(game TEXT, key TEXT, source TEXT, tr TEXT, provider TEXT, created INTEGER, PRIMARY KEY(game,key));");
+        Exec(ReviewSchema);
     }
 
     private void Exec(string sql)
