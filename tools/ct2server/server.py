@@ -25,7 +25,8 @@ def main():
     a = ap.parse_args()
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
-    add_dll_dirs()
+    if a.device != "cpu":   # explicit CPU never touches CUDA/cuBLAS/cuDNN DLLs
+        add_dll_dirs()
     import ctranslate2, sentencepiece as spm
     dev = a.device
     if dev == "auto":

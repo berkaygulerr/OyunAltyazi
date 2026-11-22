@@ -1,0 +1,26 @@
+# Benchmark cases: original generic game-style lines (no game dialogue). Lines with '|' are "first part|rest" continuation pairs.
+Hello there.
+Watch out!
+Get down, now!
+We need to move before they find us.
+Don't just stand there, help me with this door.
+I can't believe you came all the way out here alone.
+The bridge is out, so we'll have to take the long way around the mountain.
+Keep your eyes open and stay close to the wall.
+Did you hear that? Something is moving in the dark.
+You've got ten minutes to get the supplies and get back to the camp.
+If we don't leave right now, the whole place is going to collapse on top of us.
+Reloading!
+Thanks for the ride, I owe you one.
+Press and hold to open the map.
+Your health is low. Find a safe place to rest.
+I told you this was a bad idea, but you never listen to me.
+Take the second left past the old warehouse, then follow the river until you see the lights.
+They took everything we had, and now we have nothing left to lose.
+Where did you get that sword? It looks older than the city itself.
+Mission complete. Return to the base for your reward.
+We have to get to the extraction point|before the enemy reinforcements arrive.
+If we don't stop them now,|thousands of people are going to die.
+I know you're angry with me,|but we have to work together if we want to get out of here alive.
+The old man told me to meet him at the harbor|and to bring the letter nobody else was supposed to read.
+When the storm finally passed,|the village was quiet and every road was covered in snow.

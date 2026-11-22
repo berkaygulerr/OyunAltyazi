@@ -1,0 +1,76 @@
+{
+  "summary": {
+    "mode": "ct2 device=auto beam=2",
+    "loadMs": 763,
+    "firstTranslateAfterStartMs": 763,
+    "n": 100,
+    "p50": 31.2,
+    "p95": 156.1,
+    "mean": 51.1,
+    "contN": 25,
+    "contP50": 167.3,
+    "contP95": 232.4,
+    "wsAfterLoadMB": 739,
+    "wsAfterRunMB": 755,
+    "peakWsMB": 755
+  },
+  "translations": {
+    "Hello there.": "Merhaba.",
+    "Watch out!": "Dikkat et!",
+    "Get down, now!": "Yere yatın, hemen!",
+    "We need to move before they find us.": "Onlar bizi bulmadan hareket etmeliyiz.",
+    "Don't just stand there, help me with this door.": "Orada öylece durma, bu kapıda bana yardım et.",
+    "I can't believe you came all the way out here alone.": "Buraya kadar tek başına geldiğine inanamıyorum.",
+    "The bridge is out, so we'll have to take the long way around the mountain.": "Köprü dışarıda, bu yüzden dağın etrafında uzun bir yol kat etmek zorundayız.",
+    "Keep your eyes open and stay close to the wall.": "Gözlerinizi açık tutun ve duvara yakın durun.",
+    "Did you hear that? Something is moving in the dark.": "Karanlıkta bir şeyler hareket ediyor.",
+    "You've got ten minutes to get the supplies and get back to the camp.": "Malzemeleri alıp kampa dönmek için on dakikan var.",
+    "If we don't leave right now, the whole place is going to collapse on top of us.": "Eğer hemen gitmezsek, her yer tepemize çökecek.",
+    "Reloading!": "Dolduruyorum!",
+    "Thanks for the ride, I owe you one.": "Bıraktığın için teşekkürler, sana borçluyum.",
+    "Press and hold to open the map.": "Haritayı açmak için basılı tutun.",
+    "Your health is low. Find a safe place to rest.": "Sağlığın düşük, dinlenecek güvenli bir yer bul.",
+    "I told you this was a bad idea, but you never listen to me.": "Bunun kötü bir fikir olduğunu söylemiştim ama beni hiç dinlemiyorsun.",
+    "Take the second left past the old warehouse, then follow the river until you see the lights.": "Eski depodan ikinci soldan geç, sonra ışıkları görene kadar nehri takip et.",
+    "They took everything we had, and now we have nothing left to lose.": "Elimizdeki her şeyi aldılar ve şimdi kaybedecek bir şeyimiz kalmadı.",
+    "Where did you get that sword? It looks older than the city itself.": "O kılıcı nereden buldun? Şehrin kendisinden daha yaşlı görünüyor.",
+    "Mission complete. Return to the base for your reward.": "Görev tamamlandı. Ödülün için üsse dön."
+  },
+  "continuations": [
+    {
+      "f1": "We have to get to the extraction point",
+      "f2": "before the enemy reinforcements arrive.",
+      "tr1": "Çıkarma noktasına ulaşmamız gerekiyor.",
+      "cont": "Düşman takviye kuvvetleri gelmeden önce.",
+      "joined": "Çıkarma noktasına ulaşmamız gerekiyor Düşman takviye kuvvetleri gelmeden önce."
+    },
+    {
+      "f1": "If we don't stop them now,",
+      "f2": "thousands of people are going to die.",
+      "tr1": "Eğer onları şimdi durdurmazsak,",
+      "cont": "binlerce insan ölecek.",
+      "joined": "Eğer onları şimdi durdurmazsak, binlerce insan ölecek."
+    },
+    {
+      "f1": "I know you're angry with me,",
+      "f2": "but we have to work together if we want to get out of here alive.",
+      "tr1": "Bana kızgın olduğunu biliyorum.",
+      "cont": "ama buradan canlı çıkmak istiyorsak birlikte çalışmalıyız.",
+      "joined": "Bana kızgın olduğunu biliyorum ama buradan canlı çıkmak istiyorsak birlikte çalışmalıyız."
+    },
+    {
+      "f1": "The old man told me to meet him at the harbor",
+      "f2": "and to bring the letter nobody else was supposed to read.",
+      "tr1": "Yaşlı adam limanda onunla buluşmamı söyledi.",
+      "cont": "ve başka kimsenin okumaması gereken mektubu getirmemi istedi.",
+      "joined": "Yaşlı adam limanda onunla buluşmamı söyledi ve başka kimsenin okumaması gereken mektubu getirmemi istedi."
+    },
+    {
+      "f1": "When the storm finally passed,",
+      "f2": "the village was quiet and every road was covered in snow.",
+      "tr1": "Fırtına sonunda geçtiğinde,",
+      "cont": "köy sessizdi ve her yol karla kaplıydı.",
+      "joined": "Fırtına sonunda geçtiğinde, köy sessizdi ve her yol karla kaplıydı."
+    }
+  ]
+}

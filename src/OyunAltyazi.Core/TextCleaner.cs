@@ -72,7 +72,7 @@ public static class TextCleaner
         if (TooShort(joined)) return null;
         lineCount = rows.Count;
         box = BoxOf(rows);
-        return SplitSpeaker(joined, knownSpeakers);
+        return Corrected(SplitSpeaker(joined, knownSpeakers));
     }
 
     // "Price:", "ATREUS:", "Mimir Head:" at the start of a row: <= 3 words, each capitalised or ALL CAPS (GameTranslator SubtitleSegmenter.label).
@@ -115,8 +115,11 @@ public static class TextCleaner
             if (texts.Count == 0 || StartsWithSpeakerLabel(r.Text, knownSpeakers)) texts.Add(r.Text);
             else texts[^1] += " " + r.Text;
         }
-        return texts.Select(t => SplitSpeaker(t, knownSpeakers)).Where(u => u.Text.Trim().Length > 0).ToList();
+        return texts.Select(t => Corrected(SplitSpeaker(t, knownSpeakers))).Where(u => u.Text.Trim().Length > 0).ToList();
     }
+
+    // OCR word repair touches the dialogue only; the speaker label was already settled by SplitSpeaker.
+    private static SubtitleText Corrected(SubtitleText u) => u with { Text = OcrWordCorrector.Correct(u.Text) };
 
     /// <summary>Separates 'Name: text'. A garbled/partial name is repaired from knownSpeakers or dropped - never shown partially.</summary>
     public static SubtitleText SplitSpeaker(string joined, IReadOnlyCollection<string>? known = null)

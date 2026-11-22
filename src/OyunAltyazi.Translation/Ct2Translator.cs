@@ -48,7 +48,10 @@ public static class Ct2Paths
     public static bool IsInstalled(string? script = null) =>
         FindPython() is not null && ModelReady && (script ?? FindServerScript()) is not null;
 
-    public static SidecarLauncher ProcessLauncher(string python, string script, string modelDir) => () =>
+    public static string[] BuildArgs(string script, string modelDir, string? device) =>
+        ["-u", script, modelDir, "--device", LocalDevice.SidecarArg(device)];
+
+    public static SidecarLauncher ProcessLauncher(string python, string script, string modelDir, string? device = null) => () =>
     {
         var psi = new ProcessStartInfo(python)
         {
@@ -56,7 +59,7 @@ public static class Ct2Paths
             UseShellExecute = false, CreateNoWindow = true,
             StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = new UTF8Encoding(false),
         };
-        psi.ArgumentList.Add("-u"); psi.ArgumentList.Add(script); psi.ArgumentList.Add(modelDir);
+        foreach (var a in BuildArgs(script, modelDir, device)) psi.ArgumentList.Add(a);
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         var proc = Process.Start(psi) ?? throw new TranslatorException("Yerel çeviri süreci başlatılamadı.");
         proc.ErrorDataReceived += (_, _) => { };

@@ -23,6 +23,8 @@ public static class EnglishWords
         return set;
     }
 
+    internal static IReadOnlyCollection<string> All => Words.Value;
+
     /// <summary>The list loaded (when it did not, every quality check passes: no list, no judgement).</summary>
     public static bool Available => Words.Value.Count > 0;
 
@@ -62,7 +64,7 @@ public static class TextQuality
         return token[start..end];
     }
 
-    private static bool IsContraction(string word)
+    internal static bool IsContraction(string word)
     {
         var lower = word.ToLowerInvariant();
         if (lower is "em" or "cmon" or "ya" or "til" or "cause") return true;

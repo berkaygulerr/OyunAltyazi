@@ -40,10 +40,18 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // Landscape-first: never taller/wider than the monitor work area.
+        Width = Math.Min(Width, SystemParameters.WorkArea.Width - 24);
+        Height = Math.Min(Height, SystemParameters.WorkArea.Height - 24);
         DarkTitleBar.Apply(this);
         var settings = _app.Settings.Load();
-        (settings.Translator == "google_only" ? TrGoogle : TrLocal).IsChecked = true;
+        (settings.Translator == "google_only" ? TrGoogle
+            : TranslatorChoice.UseGemini(settings.Translator, settings.GeminiConsent, _app.GeminiKeyStored) ? TrGemini : TrLocal).IsChecked = true;
         InitTranslatorCard();
+        SyncLocalDeviceCombo();
+        _app.LocalDeviceReady += () => Dispatcher.BeginInvoke(UpdateStatusDots);
+        _app.AutoPacks.Changed += () => Dispatcher.BeginInvoke(UpdateLocalFilesInfo);
+        _app.AutoGlossaries.Changed += () => Dispatcher.BeginInvoke(UpdateLocalFilesInfo);
         var showShots = _app.Settings.Load().ShowInScreenshots;
         ScreenshotCheck.IsChecked = showShots;
         DiagCheck.IsChecked = _app.Settings.Load().DiagnosticLog;
@@ -110,6 +118,9 @@ public sealed partial class MainWindow : Window
             var s = _app.Settings.Load();
             if (s.LastExe != info.ExeName) _app.Settings.Save(s with { LastExe = info.ExeName });
         }
+        if (info is not null) _app.ApplyLocalFiles(info.ExeName);
+        _app.AutoGlossaries.Select(info?.ExeName);
+        _ = _app.AutoPacks.SelectAsync(info?.ExeName);   // async, never blocks; manual pack/glossary files above always win
         LoadProfileControls();
         UpdateButtons();
         if (_ready) RefreshPreview();
@@ -118,13 +129,13 @@ public sealed partial class MainWindow : Window
     private void UpdateButtons()
     {
         StartBtn.IsEnabled = _app.Ocr is not null && (Running || _selected is not null);
-        StartBtn.Content = Running ? "■  Durdur" : "▶  Çeviriyi Başlat";
-        StartBtn.Style = (Style)FindResource(Running ? "DangerButton" : "SuccessButton");
+        StartBtn.Content = Running ? "Durdur" : "Çeviriyi başlat";
+        StartBtn.Style = (Style)FindResource(Running ? "StopButton" : "PrimaryButton");
         SelectRegionBtn.IsEnabled = _selected is not null;
         PreviewRefreshBtn.IsEnabled = _selected is not null;
         WindowCombo.IsEnabled = !Running;
         RefreshBtn.IsEnabled = !Running;
-        TrLocal.IsEnabled = TrGoogle.IsEnabled = !Running;
+        TrLocal.IsEnabled = TrGoogle.IsEnabled = LocalDeviceCombo.IsEnabled = !Running;
         TrLockedNote.Visibility = Running ? Visibility.Visible : Visibility.Collapsed;
         UpdateStatusDots();
     }
@@ -187,6 +198,10 @@ public sealed partial class MainWindow : Window
         var label = source switch
         {
             TranslationSource.Cache => "kaynak: önbellek",
+            TranslationSource.Pack => "kaynak: oyun paketi (yerel)",
+            TranslationSource.Glossary => "kaynak: sözlük (yerel)",
+            TranslationSource.AutoGlossary => "kaynak: otomatik sözlük (yerleşik)",
+            TranslationSource.Gemini => "kaynak: Gemini (çevrimiçi)",
             TranslationSource.Translator => $"kaynak: {(_app.TranslatorName == "Google" ? "Google (çevrimiçi)" : "yerel model")}",
             _ => "yedek: çeviri başarısız, İngilizce gösteriliyor",
         };
@@ -218,11 +233,13 @@ public sealed partial class MainWindow : Window
         {
             LatAvg.Text = LatP95.Text = "—";
             LatencyText.Text = "Henüz veri yok";
+            LatencyPanel.Visibility = LatencyText.Visibility = Visibility.Collapsed;
         }
         else
         {
             LatAvg.Text = $"{a.AvgMs:0} ms";
             LatP95.Text = $"{a.P95Ms:0} ms";
+            LatencyPanel.Visibility = LatencyText.Visibility = Visibility.Visible;
             LatencyText.Text = $"Son {a.Count} satır · yakalama→ekran ort {b.AvgMs:0} ms / p95 {b.P95Ms:0} ms";
         }
         if (Tabs.SelectedIndex == 2) UpdateCacheCount();
@@ -244,7 +261,9 @@ public sealed partial class MainWindow : Window
         else Set(DotOcr, OcrStatus, "ErrorBrush", "İngilizce OCR yok");
 
         if (TrGoogle.IsChecked == true) Set(DotTr, TrStatus, "SuccessBrush", "Google (çevrimiçi)");
-        else if (_app.LocalInstalled) Set(DotTr, TrStatus, "SuccessBrush", "Yerel model hazır (GPU)");
+        else if (_app.TranslatorName.StartsWith("Gemini")) Set(DotTr, TrStatus, "SuccessBrush", "Gemini (çevrimiçi) + yerel yedek");
+        else if (_app.TranslatorName.Contains("ONNX")) Set(DotTr, TrStatus, "SuccessBrush", "Yerel model hazır (ONNX, CPU)");
+        else if (_app.LocalInstalled) Set(DotTr, TrStatus, "SuccessBrush", "Yerel model: " + _app.LocalDeviceLabel);
         else Set(DotTr, TrStatus, "WarnBrush", "Model yok → Google");
     }
 }

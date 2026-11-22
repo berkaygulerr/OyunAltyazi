@@ -22,6 +22,12 @@ public interface IContinuationTranslator : ITranslator
     Task<string> TranslateContinuationAsync(string fullEnglish, string shownPrefixTurkish, TranslationContext ctx, CancellationToken ct);
 }
 
+/// <summary>Optional: the translator's cache entries live in their own namespace (provider + model + context) so they never mix with other providers.</summary>
+public interface ICacheScoped
+{
+    string CacheScope(TranslationContext ctx);
+}
+
 public sealed class TranslatorException(string message, int? statusCode = null) : Exception(message)
 {
     public int? StatusCode { get; } = statusCode;

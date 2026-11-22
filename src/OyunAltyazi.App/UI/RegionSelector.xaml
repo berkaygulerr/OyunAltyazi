@@ -14,7 +14,7 @@
         <Border CornerRadius="10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" ClipToBounds="True" HorizontalAlignment="Left">
             <Canvas x:Name="Surface" Background="Black" Cursor="Cross" MouseLeftButtonDown="Down" MouseMove="Move" MouseLeftButtonUp="Up">
                 <Image x:Name="Img"/>
-                <Rectangle x:Name="Sel" Stroke="{StaticResource AccentBrush}" StrokeThickness="2" Fill="#333B82F6"/>
+                <Rectangle x:Name="Sel" Stroke="{StaticResource AccentBrush}" StrokeThickness="2" Fill="#33E3A73B"/>
             </Canvas>
         </Border>
     </DockPanel>

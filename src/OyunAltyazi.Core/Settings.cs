@@ -5,7 +5,9 @@ namespace OyunAltyazi.Core;
 public sealed record OverlayStyle(double FontSize = 32, double BackgroundOpacity = 0.65, double BottomMargin = 0.08,
                                   bool CoverOriginal = true, double CoverOpacity = 1.0);
 public sealed record GameProfile(string ExeName, RegionF Region, OverlayStyle Overlay, bool AutoDetected = false); // AutoDetected: legacy flag, ignored
-public sealed record AppSettings(string Translator = "auto", Dictionary<string, GameProfile>? Profiles = null, string? LastExe = null, bool ShowInScreenshots = false, bool DiagnosticLog = false);
+public sealed record AppSettings(string Translator = "auto", Dictionary<string, GameProfile>? Profiles = null, string? LastExe = null, bool ShowInScreenshots = false, bool DiagnosticLog = false,
+                          Dictionary<string, string>? GamePacks = null, Dictionary<string, string>? Glossaries = null,
+                          bool GeminiConsent = false, string GeminiModel = GeminiSettings.DefaultModel, string LocalDevice = "gpu", bool AutoGamePack = true, bool AutoGlossary = true);
 
 public sealed class SettingsStore(string directory)
 {

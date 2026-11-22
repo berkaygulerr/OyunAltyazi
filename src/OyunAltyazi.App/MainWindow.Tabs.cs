@@ -21,7 +21,7 @@ public sealed partial class MainWindow
     {
         if (!_ready || e.OriginalSource != Tabs) return;
         if (Tabs.SelectedIndex == 0) RefreshPreview();
-        if (Tabs.SelectedIndex == 2) UpdateCacheCount();
+        if (Tabs.SelectedIndex == 2) { UpdateCacheCount(); UpdateLocalFilesInfo(); }
     }
 
     /// <summary>Profilin değiştirilmiş halini kaydeder (profil yoksa oluşturur).</summary>
@@ -61,7 +61,7 @@ public sealed partial class MainWindow
         {
             _snapshot = null;
             PreviewBox.Visibility = Visibility.Collapsed;
-            PreviewPlaceholder.Text = "Önizleme için sol taraftan bir oyun penceresi seçin.";
+            PreviewPlaceholder.Text = "Önizleme için yukarıdan bir oyun penceresi seçin.";
             PreviewPlaceholder.Visibility = Visibility.Visible;
             return;
         }
@@ -176,7 +176,7 @@ public sealed partial class MainWindow
         LocalBadgeText.Foreground = (Brush)FindResource(ok ? "SuccessBrush" : "WarnBrush");
         LocalBadge.Background = new SolidColorBrush(ok ? Color.FromArgb(0x26, 0x22, 0xC5, 0x5E) : Color.FromArgb(0x26, 0xF5, 0x9E, 0x0B));
         LocalHint.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
-        UpdateTranslatorWarning();
+        UpdateTranslatorWarning(); UpdateGeminiStatus();
         UpdateCacheCount();
     }
 
@@ -196,16 +196,165 @@ public sealed partial class MainWindow
         if (Running)
         {
             _loadingControls = true;
-            (_app.TranslatorName == "Google" ? TrGoogle : TrLocal).IsChecked = true;
+            (_app.TranslatorName.StartsWith("Gemini") ? TrGemini : _app.TranslatorName == "Google" ? TrGoogle : TrLocal).IsChecked = true;
             _loadingControls = false;
             return;
         }
-        var choice = TrGoogle.IsChecked == true ? "google_only" : "auto";
+        // the radio only knows Local/Google: keep an explicit "ct2"/"onnx" opt-in instead of overwriting it with "auto"
+        var saved = _app.Settings.Load().Translator;
+        var choice = ChooseTranslator(_app.Settings.Load());
+        if (choice is null) return;
         _app.SetTranslator(choice);
         _app.Settings.Save(_app.Settings.Load() with { Translator = choice });
         UpdateTranslatorWarning();
         UpdateStatusDots();
     }
+
+    // ---------- Yerel model cihazı (GPU/CPU) ----------
+    private void SyncLocalDeviceCombo()
+    {
+        _loadingControls = true;
+        LocalDeviceCombo.SelectedIndex = _app.LocalDevicePreference == LocalDevice.Cpu ? 1 : 0;
+        _loadingControls = false;
+    }
+
+    private void LocalDevice_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready || _loadingControls) return;
+        if (Running) { SyncLocalDeviceCombo(); return; }   // çalışırken değişmez; durdurulunca uygulanır
+        var dev = (LocalDeviceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? LocalDevice.Gpu;
+        var s = _app.Settings.Load();
+        if (LocalDevice.Normalize(s.LocalDevice) == dev && s.LocalDevice == dev) return;
+        _app.Settings.Save(s with { LocalDevice = dev });
+        if (TrGoogle.IsChecked != true) _app.SetTranslator(s.Translator);   // eski yan süreç kapatılır, yenisi başlar
+        UpdateStatusDots();
+    }
+
+    // ---------- Gemini (isteğe bağlı) ----------
+    private void RevertTranslatorRadio()
+    {
+        var saved = _app.Settings.Load().Translator;
+        _loadingControls = true;
+        (saved == "google_only" ? TrGoogle : TrLocal).IsChecked = true;
+        _loadingControls = false;
+    }
+
+    /// <summary>The setting value for the selected radio, or null when the choice was refused (radio is reverted). Gemini needs a stored key AND the user's explicit consent.</summary>
+    private string? ChooseTranslator(AppSettings s)
+    {
+        if (TrGoogle.IsChecked == true) return "google_only";
+        if (TrGemini.IsChecked != true) return s.Translator is "ct2" or "onnx" ? s.Translator : "auto";
+        if (!_app.GeminiKeyStored)
+        {
+            GeminiStatus.Text = "Önce Gemini API anahtarınızı kaydedin.";
+            RevertTranslatorRadio();
+            return null;
+        }
+        if (!s.GeminiConsent)
+        {
+            var r = MessageBox.Show(this,
+                "Gemini'yi açarsanız, çevrilen altyazı satırları (ve önceki en fazla 3 satır) Google'ın Gemini API'sine İNTERNET ÜZERİNDEN gönderilir. " +
+                "Ekran görüntüsü ve oyun adı gönderilmez. Kullanım Google'ın koşullarına ve kendi API hesabınızın kotasına/ücretine tabidir.\n\n" +
+                "Gemini yanıt vermezse yerel çeviri gösterilir. Bunu istediğiniz zaman kapatabilirsiniz.\n\nGemini kullanılsın mı?",
+                "Gemini — çevrimiçi çeviri", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (r != MessageBoxResult.Yes) { RevertTranslatorRadio(); return null; }
+            _app.SetGeminiConsent(true);
+        }
+        return "gemini";
+    }
+
+    private void UpdateGeminiStatus() =>
+        GeminiStatus.Text = _app.GeminiKeyStored ? "Anahtar bu Windows hesabına şifrelenmiş olarak kayıtlı (ayarlar dosyasında değil)." : "Kayıtlı anahtar yok. Anahtarı Google AI Studio'dan alabilirsiniz.";
+
+    private void GeminiSave_Click(object sender, RoutedEventArgs e)
+    {
+        var key = GeminiKeyBox.Password.Trim();
+        GeminiKeyBox.Clear();
+        if (key.Length == 0) { GeminiStatus.Text = "Anahtar boş olamaz."; return; }
+        try { _app.SaveGeminiKey(key); }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or PlatformNotSupportedException or ArgumentException) { GeminiStatus.Text = "Anahtar kaydedilemedi."; return; }
+        UpdateGeminiStatus();
+    }
+
+    private void GeminiRemove_Click(object sender, RoutedEventArgs e)
+    {
+        _app.RemoveGeminiKey();
+        GeminiKeyBox.Clear();
+        if (TrGemini.IsChecked == true && !Running)
+        {
+            _app.Settings.Save(_app.Settings.Load() with { Translator = "auto" });
+            _loadingControls = true; TrLocal.IsChecked = true; _loadingControls = false;
+            _app.SetTranslator("auto");
+            UpdateStatusDots();
+        }
+        UpdateGeminiStatus();
+    }
+
+    // ---------- Oyun paketi / sözlük (yerel, yalnızca bu oyun için) ----------
+    private void UpdateLocalFilesInfo()
+    {
+        var exe = _profile?.ExeName;
+        bool has = exe is not null;
+        PackImportBtn.IsEnabled = GlossaryImportBtn.IsEnabled = has;
+        PackRemoveBtn.IsEnabled = has && _app.Local.PackFor(exe!) is not null;
+        GlossaryRemoveBtn.IsEnabled = has && _app.Local.GlossaryFor(exe!) is not null;
+        string Describe(GamePack? p) => p is null ? "yok" : $"{p.Count:N0} satır";
+        LocalFilesInfo.Text = !has ? "Önce soldan bir oyun penceresi seçin."
+            : $"{exe}: oyun paketi {Describe(_app.Local.PackFor(exe!))} · sözlük {Describe(_app.Local.GlossaryFor(exe!))}";
+        var ap = _app.AutoPacks;
+        AutoPackStatus.Text = !has ? "" : ap.State switch
+        {
+            AutoPackState.Loading => $"Hazır paket indiriliyor: {ap.Title}…",
+            AutoPackState.Ready => $"Hazır paket kullanılıyor: {ap.Title}",
+            AutoPackState.Manual => $"Kendi dosyanız kullanılıyor (hazır paket: {ap.Title}).",
+            AutoPackState.Failed => $"Hazır paket alınamadı ({ap.Error}); normal çeviri sürüyor.",
+            AutoPackState.Off => "Hazır paketler kapalı.",
+            _ => "Bu oyun için hazır paket yok.",
+        };
+        var ag = _app.AutoGlossaries;
+        bool manualGl = has && _app.Local.GlossaryFor(exe!) is not null;
+        AutoGlossaryStatus.Text = !has ? "" : ag.State switch
+        {
+            AutoGlossaryState.Ready => manualGl
+                ? $"Otomatik sözlük: {ag.Title} ({ag.Count:N0} ifade) hazır, ama kendi sözlüğünüz öncelikli (kaldırırsanız devreye girer)."
+                : $"Otomatik sözlük kullanılıyor: {ag.Title} ({ag.Count:N0} ifade). Oyun paketi varsa o önce gelir.",
+            AutoGlossaryState.Off => "Otomatik sözlük kapalı.",
+            _ => "Bu oyun için otomatik sözlük yok.",
+        };
+        _loadingControls = true; AutoGlossaryCheck.IsChecked = _app.Settings.Load().AutoGlossary; AutoPackCheck.IsChecked = _app.Settings.Load().AutoGamePack; _loadingControls = false;
+    }
+
+    private void AutoPackCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loadingControls) return;
+        _app.Settings.Save(_app.Settings.Load() with { AutoGamePack = AutoPackCheck.IsChecked == true });
+        _ = _app.AutoPacks.SelectAsync(_selected?.ExeName);
+        UpdateLocalFilesInfo();
+    }
+
+    private void AutoGlossaryCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loadingControls) return;
+        _app.Settings.Save(_app.Settings.Load() with { AutoGlossary = AutoGlossaryCheck.IsChecked == true });
+        _app.AutoGlossaries.Select(_selected?.ExeName);
+        UpdateLocalFilesInfo();
+    }
+
+    private void ImportLocal(bool glossary)
+    {
+        if (_profile is null) return;
+        var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Oyun paketi (*.json;*.gz)|*.json;*.gz", Title = glossary ? "Sözlük dosyası seç" : "Oyun paketi seç" };
+        if (dlg.ShowDialog(this) != true) return;
+        var err = _app.ImportLocalFile(_profile.ExeName, dlg.FileName, glossary);
+        if (!glossary) _ = _app.AutoPacks.SelectAsync(_selected?.ExeName);
+        if (err is not null) MessageBox.Show(this, err, "İçe aktarılamadı", MessageBoxButton.OK, MessageBoxImage.Warning);
+        UpdateLocalFilesInfo();
+    }
+
+    private void PackImport_Click(object sender, RoutedEventArgs e) => ImportLocal(glossary: false);
+    private void GlossaryImport_Click(object sender, RoutedEventArgs e) => ImportLocal(glossary: true);
+    private void PackRemove_Click(object sender, RoutedEventArgs e) { if (_profile is not null) { _app.RemoveLocalFile(_profile.ExeName, glossary: false); _ = _app.AutoPacks.SelectAsync(_selected?.ExeName); } UpdateLocalFilesInfo(); }
+    private void GlossaryRemove_Click(object sender, RoutedEventArgs e) { if (_profile is not null) { _app.RemoveLocalFile(_profile.ExeName, glossary: true); _app.AutoGlossaries.Select(_selected?.ExeName); } UpdateLocalFilesInfo(); }
 
     private void UpdateCacheCount()
     {
